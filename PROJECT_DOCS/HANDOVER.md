@@ -317,10 +317,34 @@ disables Ctrl+C for that group, so a test of it proves nothing either way.
 
 ### E. Found while testing on Windows (§4A)
 
-18. **The tab outlives its server.** Close the console window and the page is
-    still sitting there with nothing behind it. It should say so plainly: the
-    health ping is already the mechanism, and "no issues found" must not be what
-    a reader sees on a page whose server has gone.
+18. **The tab outlives its server.** Close the console window - or let the app
+    stop by itself while the tab is in the background - and the page sits there
+    with nothing behind it, still showing verdicts and findings. A reader cannot
+    tell the difference between a verdict and the memory of one, and "no issues
+    found" is the last thing that should be readable on a page whose server has
+    gone. This is the same class of harm the wording rules in section 5 exist to
+    prevent, which is why it comes first in this list.
+
+    The mechanism is already there: `health` in `frontend/src/App.tsx` polls
+    `/api/health` every `KEEP_ALIVE_MS` and is what tells the app the tab is
+    still open. What is missing is the failure branch - `health.isError` after
+    its retries, meaning the server is gone rather than slow. The screen for it
+    can follow the one immediately below, the `quit_requested` block, which
+    already says "UsefulRedact has stopped" and is what a deliberate Quit
+    shows; the difference is that this one was not asked for, so it should say
+    the app is no longer running and that what was on screen was a check, not a
+    record, rather than implying anything was deleted or kept. Whether it
+    replaces the page or covers it is a judgement: replacing is safer and
+    loses the findings a person may still be reading, so covering with the
+    findings visibly inert behind it is probably better, and either way nothing
+    underneath may stay clickable.
+
+    Take care that a slow first load, a machine waking from sleep and the two
+    minutes of idle shutdown are not mistaken for it; TanStack Query's retry
+    and the keep-alive interval decide that, and the test should pin whichever
+    is chosen. `frontend/src/lib/verdicts.test.ts` already fails the build on
+    "safe", "secure", "clean" and "passed": the new wording has to pass that
+    too, and deserves its own test with the health query in an error state.
 19. **Pin onnxruntime to the version the figures were measured on**, or say in
     the README that the runtime floats. A fresh install today gets 1.30.0 where
     §1 records 1.23.2. The same question applies to the other `>=` pins; they
