@@ -13,6 +13,12 @@ import { VERDICTS } from './lib/verdicts';
 
 const POLL_MS = 700;
 const KEEP_ALIVE_MS = 60_000;
+// A ping that fails is not a stopped app: a request can be lost, and a machine waking from
+// sleep drops whatever was in flight. Only after these does the app say it has gone. They
+// are spelled out rather than left to the default, because what depends on them is a screen
+// saying nothing here can be relied on.
+const HEALTH_RETRIES = 2;
+const HEALTH_RETRY_MS = 1_000;
 
 function Welcome() {
   const order = [
@@ -50,6 +56,36 @@ function Welcome() {
   );
 }
 
+/** The server has gone without being asked to: the window it was started from was closed,
+ * it stopped by itself after the tab was left, or it was killed. Whatever is behind this
+ * was checked earlier, so it is covered and made inert rather than left to be read as a
+ * verdict that still stands. It does not say the copies were deleted: a stop of this kind
+ * deletes them, a kill cannot, and from in here there is no telling which happened. */
+function ServerStopped() {
+  return (
+    <div
+      role="alertdialog"
+      aria-modal="true"
+      aria-labelledby="stopped-title"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-8"
+    >
+      <div className="max-w-md rounded-lg border border-slate-300 bg-white p-6 shadow-lg">
+        <h2 id="stopped-title" className="text-lg font-semibold">
+          UsefulRedact is no longer running
+        </h2>
+        <p className="mt-2 text-sm text-slate-700">
+          The app behind this tab has stopped – its window was closed, or it stopped by itself after
+          the tab had been left for a while.
+        </p>
+        <p className="mt-3 text-sm text-slate-700">
+          What is on this page was checked earlier and is no longer live. Nothing more can be
+          checked here. Start UsefulRedact again to go on.
+        </p>
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
   const queryClient = useQueryClient();
   const [selected, setSelectedState] = useState<string | null>(
@@ -65,6 +101,8 @@ export default function App() {
     queryKey: ['health'],
     queryFn: api.health,
     refetchInterval: KEEP_ALIVE_MS, // also tells the app this tab is still open
+    retry: HEALTH_RETRIES,
+    retryDelay: HEALTH_RETRY_MS,
   });
   const session = useQuery({
     queryKey: ['session'],
@@ -121,106 +159,112 @@ export default function App() {
     );
   }
 
+  // Only once the retries above are spent: a single failed ping is not a stopped app.
+  const stopped = health.isError;
+
   return (
-    <div className="flex h-screen flex-col">
-      <header className="flex flex-wrap items-center gap-x-4 gap-y-1 border-b border-slate-200 bg-white px-4 py-2">
-        <h1 className="text-lg font-semibold">UsefulRedact</h1>
-        <p className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-3 py-1 text-sm text-slate-700">
-          <Lock className="h-3.5 w-3.5" aria-hidden />
-          Runs locally – nothing is uploaded, and nothing is kept when you quit
-        </p>
-        <span className="ml-auto text-xs text-slate-500">
-          {health.data ? `v${health.data.version}` : ''}
-          {health.data?.ocr === false && ' · OCR unavailable: scans cannot be read'}
-          {health.data?.ner === false && ' · name model unavailable'}
-        </span>
-        {health.data?.desktop && (
-          <button
-            type="button"
-            onClick={() => quit.mutate()}
-            className="inline-flex items-center gap-1 rounded-md border border-slate-300 px-2.5 py-1 text-sm hover:bg-slate-50"
-          >
-            <Power className="h-4 w-4" aria-hidden /> Quit
-          </button>
+    <>
+      <div className="flex h-screen flex-col" inert={stopped}>
+        <header className="flex flex-wrap items-center gap-x-4 gap-y-1 border-b border-slate-200 bg-white px-4 py-2">
+          <h1 className="text-lg font-semibold">UsefulRedact</h1>
+          <p className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-3 py-1 text-sm text-slate-700">
+            <Lock className="h-3.5 w-3.5" aria-hidden />
+            Runs locally – nothing is uploaded, and nothing is kept when you quit
+          </p>
+          <span className="ml-auto text-xs text-slate-500">
+            {health.data ? `v${health.data.version}` : ''}
+            {health.data?.ocr === false && ' · OCR unavailable: scans cannot be read'}
+            {health.data?.ner === false && ' · name model unavailable'}
+          </span>
+          {health.data?.desktop && (
+            <button
+              type="button"
+              onClick={() => quit.mutate()}
+              className="inline-flex items-center gap-1 rounded-md border border-slate-300 px-2.5 py-1 text-sm hover:bg-slate-50"
+            >
+              <Power className="h-4 w-4" aria-hidden /> Quit
+            </button>
+          )}
+        </header>
+
+        {session.error && (
+          <p role="alert" className="bg-red-50 px-4 py-2 text-sm text-red-800">
+            {session.error.message}
+          </p>
         )}
-      </header>
 
-      {session.error && (
-        <p role="alert" className="bg-red-50 px-4 py-2 text-sm text-red-800">
-          {session.error.message}
-        </p>
-      )}
-
-      <div className="grid min-h-0 flex-1 grid-cols-1 md:grid-cols-[22rem_minmax(0,1fr)]">
-        <aside className="min-h-0 space-y-3 overflow-auto border-r border-slate-200 p-3">
-          <DropZone onFiles={onFiles} busy={add.isPending} />
-          {notice && (
-            <p role="status" className="rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-900">
-              {notice}
-            </p>
-          )}
-          <ListsPanel
-            key={`${session.data?.watchlist}|${session.data?.ignore}`}
-            watchlist={session.data?.watchlist ?? ''}
-            ignore={session.data?.ignore ?? ''}
-            hasDocuments={documents.length > 0}
-            onApply={(watchlist, ignore) => lists.mutate({ watchlist, ignore })}
-          />
-          <DocumentList
-            documents={documents}
-            selected={selected}
-            onSelect={setSelected}
-            onRemove={(id) => {
-              if (id === selected) setSelected(null);
-              remove.mutate(id);
-            }}
-          />
-          {documents.length > 0 && (
-            <section className="rounded-lg border border-slate-200 bg-white p-3">
-              <h2 className="text-sm font-medium">Export the report</h2>
-              <div className="mt-2 flex flex-wrap gap-2">
-                {(
-                  [
-                    ['json', 'JSON'],
-                    ['findings', 'Findings CSV'],
-                    ['documents', 'Documents CSV'],
-                  ] as const
-                ).map(([kind, label]) => (
-                  <a
-                    key={kind}
-                    href={checked > 0 ? exportUrl(kind) : undefined}
-                    aria-disabled={checked === 0}
-                    className={`inline-flex items-center gap-1 rounded-md border border-slate-300 px-2.5 py-1 text-sm ${
-                      checked > 0 ? 'hover:bg-slate-50' : 'pointer-events-none opacity-40'
-                    }`}
-                  >
-                    <Download className="h-4 w-4" aria-hidden /> {label}
-                  </a>
-                ))}
-              </div>
-              <p className="mt-2 text-xs text-slate-500">
-                A report contains the personal information that was found: that is the evidence.
-                Keep it where you keep the documents.
+        <div className="grid min-h-0 flex-1 grid-cols-1 md:grid-cols-[22rem_minmax(0,1fr)]">
+          <aside className="min-h-0 space-y-3 overflow-auto border-r border-slate-200 p-3">
+            <DropZone onFiles={onFiles} busy={add.isPending} />
+            {notice && (
+              <p role="status" className="rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                {notice}
               </p>
-              <button
-                type="button"
-                onClick={() => {
-                  setSelected(null);
-                  clear.mutate();
-                }}
-                className="mt-3 inline-flex items-center gap-1 text-xs text-slate-600 hover:text-slate-900"
-              >
-                <Trash2 className="h-3.5 w-3.5" aria-hidden /> Clear this session (your files are
-                untouched)
-              </button>
-            </section>
-          )}
-        </aside>
+            )}
+            <ListsPanel
+              key={`${session.data?.watchlist}|${session.data?.ignore}`}
+              watchlist={session.data?.watchlist ?? ''}
+              ignore={session.data?.ignore ?? ''}
+              hasDocuments={documents.length > 0}
+              onApply={(watchlist, ignore) => lists.mutate({ watchlist, ignore })}
+            />
+            <DocumentList
+              documents={documents}
+              selected={selected}
+              onSelect={setSelected}
+              onRemove={(id) => {
+                if (id === selected) setSelected(null);
+                remove.mutate(id);
+              }}
+            />
+            {documents.length > 0 && (
+              <section className="rounded-lg border border-slate-200 bg-white p-3">
+                <h2 className="text-sm font-medium">Export the report</h2>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {(
+                    [
+                      ['json', 'JSON'],
+                      ['findings', 'Findings CSV'],
+                      ['documents', 'Documents CSV'],
+                    ] as const
+                  ).map(([kind, label]) => (
+                    <a
+                      key={kind}
+                      href={checked > 0 ? exportUrl(kind) : undefined}
+                      aria-disabled={checked === 0}
+                      className={`inline-flex items-center gap-1 rounded-md border border-slate-300 px-2.5 py-1 text-sm ${
+                        checked > 0 ? 'hover:bg-slate-50' : 'pointer-events-none opacity-40'
+                      }`}
+                    >
+                      <Download className="h-4 w-4" aria-hidden /> {label}
+                    </a>
+                  ))}
+                </div>
+                <p className="mt-2 text-xs text-slate-500">
+                  A report contains the personal information that was found: that is the evidence.
+                  Keep it where you keep the documents.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelected(null);
+                    clear.mutate();
+                  }}
+                  className="mt-3 inline-flex items-center gap-1 text-xs text-slate-600 hover:text-slate-900"
+                >
+                  <Trash2 className="h-3.5 w-3.5" aria-hidden /> Clear this session (your files are
+                  untouched)
+                </button>
+              </section>
+            )}
+          </aside>
 
-        <main className="min-h-0 overflow-auto">
-          {current ? <DocumentView key={current.id} summary={current} /> : <Welcome />}
-        </main>
+          <main className="min-h-0 overflow-auto">
+            {current ? <DocumentView key={current.id} summary={current} /> : <Welcome />}
+          </main>
+        </div>
       </div>
-    </div>
+      {stopped && <ServerStopped />}
+    </>
   );
 }

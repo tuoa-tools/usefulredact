@@ -149,6 +149,41 @@ describe('App', () => {
     expect(box).toHaveAttribute('aria-pressed', 'false');
   });
 
+  it('says the app has stopped, and will not let what it found be read as current', async () => {
+    // The tab is fine; the app behind it is gone. The session answers from cache so the
+    // findings are still on the page underneath - which is the case that matters.
+    const documents = { watchlist: '', ignore: '', checking: 0, documents: [summary] };
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url.endsWith('/api/health')) throw new TypeError('Failed to fetch');
+        const body = url.endsWith('/api/session')
+          ? documents
+          : url.includes('/api/documents/abc')
+            ? detail
+            : {};
+        return new Response(JSON.stringify(body), { status: 200 });
+      })
+    );
+    show();
+
+    // Long enough for the retries in App.tsx to be spent; a single failed ping must not do it.
+    const dialog = await screen.findByRole('alertdialog', {}, { timeout: 8000 });
+    expect(within(dialog).getByText(/no longer running/i)).toBeInTheDocument();
+    expect(within(dialog).getByText(/checked earlier and is no longer live/i)).toBeInTheDocument();
+
+    // Nothing behind it can be reached, so a stale verdict cannot be clicked into.
+    expect(document.querySelector('[inert]')).toBeTruthy();
+
+    // It must not say the copies were deleted: from here there is no telling whether the app
+    // stopped tidily or was killed.
+    expect(dialog.textContent).not.toMatch(/deleted/i);
+    expect(dialog.textContent?.toLowerCase()).not.toMatch(
+      /\bsafe\b|\bsecure\b|\bclean\b|\bpassed\b/
+    );
+  }, 15000);
+
   it('hides a kind of finding from the page and the list', async () => {
     serve({ watchlist: '', ignore: '', checking: 0, documents: [summary] });
     show();
