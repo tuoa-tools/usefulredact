@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Iterator
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from usefulredact.models import CONTEXT, PI
 
@@ -25,6 +25,7 @@ class Match:
     kind: str = PI
     detail: str = ""
     score: float | None = None
+    also: list[str] = field(default_factory=list)  # detectors whose match this one absorbed
 
 
 # --------------------------------------------------------------------- checksums
@@ -58,13 +59,21 @@ ROLE_MAILBOXES = frozenset(
 )
 
 
+# OCR can lose the colon and glue a label onto the address: "Emailerin.wilson12@yahoo.com".
+_GLUED_LABEL = re.compile(r"(?i)^(?:e-?mail|mail)[:.]?(?=[A-Za-z0-9][A-Za-z0-9._%+-]{2,}@)")
+
+
 def find_emails(text: str) -> Iterator[Match]:
     for m in EMAIL.finditer(text):
-        local = m.group(0).split("@", 1)[0].lower()
+        start = m.start()
+        glued = _GLUED_LABEL.match(m.group(0))
+        if glued and m.group(0)[0].isupper():  # "Email..." as a label, not "emailer@..."
+            start += glued.end()
+        local = text[start : m.end()].split("@", 1)[0].lower()
         if local in ROLE_MAILBOXES:
-            yield Match(m.start(), m.end(), "email", CONTEXT, "shared mailbox, not a person's")
+            yield Match(start, m.end(), "email", CONTEXT, "shared mailbox, not a person's")
         else:
-            yield Match(m.start(), m.end(), "email")
+            yield Match(start, m.end(), "email")
 
 
 # ------------------------------------------------------------------------- phone

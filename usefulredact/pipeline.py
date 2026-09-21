@@ -74,7 +74,7 @@ def _priority(match: Match) -> int:
 
 def find_matches(text: str, watchlist: list[str], use_ner: bool = True) -> list[Match]:
     """Every detector over one string, with duplicates folded: a match that sits
-    inside one already kept is dropped, and named in the kept one's detail."""
+    inside one already kept is dropped, and named in the kept one's `also`."""
     candidates: list[Match] = list(wl.find_watchlist(text, watchlist))
     candidates += detectors.find_all(text)
     candidates += ner.find_labelled_names(text)
@@ -86,10 +86,8 @@ def find_matches(text: str, watchlist: list[str], use_ner: bool = True) -> list[
         holder = next((k for k in kept if k.start <= match.start and match.end <= k.end), None)
         if holder is None:
             kept.append(match)
-        elif match.kind == PI and holder.detector != match.detector:
-            note = f"also {match.detector}"
-            if note not in holder.detail:
-                holder.detail = f"{holder.detail}; {note}" if holder.detail else note
+        elif match.kind == PI and match.detector not in (holder.detector, *holder.also):
+            holder.also.append(match.detector)
     return sorted(kept, key=lambda m: (m.start, m.end))
 
 
@@ -136,6 +134,7 @@ def pi_findings(
                 detail=detail,
                 score=match.score,
                 covered=covered,
+                also=list(match.also),
             )
         )
     return findings
@@ -152,11 +151,9 @@ def _fold_covered(found: list[Finding], under_marks: list[Finding]) -> list[Find
         if holder is None:
             kept.append(finding)
         elif finding.kind == PI:
-            note = "holds: "
-            if note not in holder.detail:
-                holder.detail += f"; {note}{finding.detector}"
-            elif finding.detector not in holder.detail.split(note, 1)[1].split(", "):
-                holder.detail += f", {finding.detector}"
+            for detector in (finding.detector, *finding.also):
+                if detector not in holder.holds:
+                    holder.holds.append(detector)
     return kept
 
 
@@ -182,6 +179,7 @@ def _loose_text_findings(
                 source=source,
                 detail=detail,
                 score=match.score,
+                also=list(match.also),
             )
         )
     return findings

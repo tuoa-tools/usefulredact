@@ -60,7 +60,9 @@ def test_recovered_text_is_reported_with_what_it_holds(made, checked):
     for item in letter.items:
         assert item.value.split()[-1] in recovered
     assert detectors_of(result, RECOVERABLE) == {"drawn_shape"}
-    assert any("holds: " in f.detail for f in result.findings if f.kind == RECOVERABLE)
+    held = {kind for f in result.findings if f.kind == RECOVERABLE for kind in f.holds}
+    assert held and held <= {"name_label", "ner_person", "dob", "email", "phone_au",
+                             "medicare", "tfn", "address_au"}  # fmt: skip
     assert all(f.bbox and f.boxes for f in result.findings if f.kind == RECOVERABLE)
 
 

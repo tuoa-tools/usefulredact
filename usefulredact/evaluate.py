@@ -133,8 +133,7 @@ def item_found(row: Row, kind: str, value: str) -> str | None:
     kind whose text holds the value, or sits inside it (OCR may clip an end)."""
     want = _squash(value)
     for finding in row.result.findings:
-        names = {finding.detector} | set(re.findall(r"also (\w+)", finding.detail))
-        names |= set(re.findall(r"(\w+)", finding.detail.partition("holds: ")[2]))
+        names = {finding.detector, *finding.also, *finding.holds}
         if not names & PI_TYPE_DETECTORS[kind]:
             continue
         got = _squash(finding.text)

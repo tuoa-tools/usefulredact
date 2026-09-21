@@ -62,6 +62,8 @@ class Finding:
     detail: str = ""
     score: float | None = None  # fuzzy-match score or OCR confidence, where one applies
     covered: bool = False  # PI that sits under a mark: hidden from view, still extractable
+    holds: list[str] = field(default_factory=list)  # recovered text: the kinds of PI in it
+    also: list[str] = field(default_factory=list)  # other detectors that matched the same words
 
     def to_dict(self) -> dict:
         d = asdict(self)

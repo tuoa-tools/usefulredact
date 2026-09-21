@@ -73,6 +73,11 @@ def test_email():
     assert found("no at-sign here: kylie.nguyen.mailbox.example", "email") == []
 
 
+def test_label_glued_on_by_ocr_is_not_part_of_the_address():
+    assert found("Emailerin.wilson12@yahoo.com", "email") == ["erin.wilson12@yahoo.com"]
+    assert found("write to emailer@post.example", "email") == ["emailer@post.example"]
+
+
 def test_shared_mailbox_is_context():
     text = "Contact enquiries@harbourline.example"
     assert found(text, "email") == []
