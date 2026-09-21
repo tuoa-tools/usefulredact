@@ -340,7 +340,7 @@ step; the model is already inside them.
 - **No telemetry**, of any kind.
 - **Nothing is kept.** The app copies dropped files into a private temporary
   folder to read them, and deletes it when it stops: on Quit, when the tab has
-  been closed for two minutes, when the session has been left untouched for 30, on Ctrl+C, on a termination signal, and on
+  been closed for two minutes, when the session has been left untouched for 30 minutes, on Ctrl+C, on a termination signal, and on
   Windows when the console window is closed, at log off and at shut down. A
   process that is killed outright (`kill -9`, a power cut) cannot clean up after
   itself; the next start finds that folder and deletes it. The watchlist and
