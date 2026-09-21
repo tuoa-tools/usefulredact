@@ -2,10 +2,10 @@
 
 Nothing here is meant to outlive the process. Dropped files are copied into a private
 temporary folder so the checker can read them, and the folder is deleted when the app
-stops: on quit, on Ctrl+C, on a termination signal, at interpreter exit. A process that
-is killed outright cannot clean up after itself, so every start sweeps the folders of
-sessions whose owner is gone (see _owner_is_gone). The watchlist and ignore list live
-in memory only.
+stops: on quit, on Ctrl+C, on a termination signal, when the console window is closed
+(see console_win.py), at interpreter exit. A process that is killed outright cannot
+clean up after itself, so every start sweeps the folders of sessions whose owner is gone
+(see _owner_is_gone). The watchlist and ignore list live in memory only.
 """
 
 from __future__ import annotations
@@ -31,6 +31,10 @@ PREFIX = "usefulredact-session-"
 LOCK_NAME = ".lock"
 STALE_SECONDS = 24 * 3600
 CLOSE_WAIT_SECONDS = 60.0  # a scanned page can take several seconds to finish
+# Windows ends the process a few seconds after a console-close handler returns, so that
+# road cannot afford the wait above: it takes what it can get and leaves the rest to the
+# sweep at the next start.
+CONSOLE_CLOSE_WAIT_SECONDS = 2.5
 
 
 @dataclass
@@ -195,16 +199,20 @@ class Session:
                 continue  # the lists changed meanwhile; this document is queued again
             doc.result, doc.status = result, "done"
 
-    def close(self) -> None:
+    def close(self, wait: float = CLOSE_WAIT_SECONDS) -> None:
         """Stop the worker and delete every copy. The worker finishes the page it is on
-        first, so the folder is not pulled from under an open file (Windows would refuse)."""
+        first, so the folder is not pulled from under an open file (Windows would refuse).
+
+        `wait` is how long to give it. The console-close road passes a short one because
+        Windows is about to end the process; a file the worker still holds then stays for
+        the sweep, which is what the sweep is for."""
         if self._closed:
             return
         self._closed = True
         atexit.unregister(self.close)
         self.docs.clear()  # nothing further in the queue is worth checking
         self._queue.put(None)
-        self._thread.join(timeout=CLOSE_WAIT_SECONDS)
+        self._thread.join(timeout=wait)
         self._lock_file.close()  # releases the lock; Windows needs it closed to delete it
         for _ in range(5):
             shutil.rmtree(self.dir, ignore_errors=True)
