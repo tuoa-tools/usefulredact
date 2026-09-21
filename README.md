@@ -196,6 +196,11 @@ python3.13 -m venv .venv
 .venv/bin/pip install -e .            # Windows: .venv\Scripts\pip install -e .
 ```
 
+The name model is a wheel on the spaCy releases page rather than on PyPI, so that
+one download comes from GitHub. If it fails with a gateway error, GitHub is having
+a moment: run the same command again, or fetch the wheel yourself and install it
+from the file.
+
 ### The command line
 
 ```
@@ -231,8 +236,9 @@ Closing the tab stops the app after two minutes, once nothing is being checked.
 - **No telemetry**, of any kind.
 - **Nothing is kept.** The app copies dropped files into a private temporary
   folder to read them, and deletes it when it stops: on Quit, when the tab has
-  been closed for two minutes, on Ctrl+C, on a termination signal. A process
-  that is killed outright (`kill -9`, a power cut) cannot clean up after
+  been closed for two minutes, on Ctrl+C, on a termination signal, and on
+  Windows when the console window is closed, at log off and at shut down. A
+  process that is killed outright (`kill -9`, a power cut) cannot clean up after
   itself; the next start finds that folder and deletes it. The watchlist and
   ignore list live in memory. Nothing is logged to a file.
 - **Your files are only read**, never written to.

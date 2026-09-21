@@ -29,11 +29,12 @@ app/
   main.py                FastAPI: session, documents, page image, export, launch token
   session.py             temp copies, one worker thread, clean-up, the stale-folder sweep
   launcher.py            `usefulredact-app`: free port, token, browser tab, signals
+  console_win.py         the window's X, log off and shut down (Windows; see §4)
 frontend/                React 19 + Vite + TypeScript + Tailwind 4 + TanStack Query
   src/App.tsx            header, drop zone, lists, document list, export
   src/components/        DocumentView (page + boxes + findings), DropZone, ListsPanel, ...
   src/lib/               verdicts (all wording), boxes (percent positions), files, route
-tests/                   94 tests (pytest); fixtures are generated, nothing is downloaded
+tests/                   pytest; fixtures are generated, nothing is downloaded
 eval/                    eval_report.md and eval_chart.png (tracked); results/ is ignored
 docs/screenshot.png      the README picture, taken from the running app
 PROJECT_DOCS/            BRIEF.md (specification), this file
@@ -46,8 +47,8 @@ Environment: Python 3.13, `.venv` from `pip install -e ".[dev]"`. Verified
 together: rapidocr 3.9.2, onnxruntime 1.23.2, pymupdf 1.28.2, spacy 3.8.16
 with en_core_web_sm 3.8.0 (a pinned wheel URL in `pyproject.toml`), rapidfuzz
 3.14.6, fastapi 0.141, numpy 2.5, pillow 12.3. Node 24 for the UI. The
-development machine is an Intel Mac, so Windows and Apple Silicon are proven
-only by CI.
+development machine is an Intel Mac; Windows 11 was gone over by hand on
+2026-09-22 (§4A), and Apple Silicon is still proven only by CI.
 
 ```
 .venv/bin/usefulredact check <paths> --out report/      the command line
@@ -161,6 +162,13 @@ page. Section 6B is about that.
 - Under the launcher uvicorn runs in a thread and installs no signal handlers,
   so `kill` used to leave the document copies on disk. SIGTERM and SIGBREAK now
   take the Quit road, and the session has an exit hook.
+- **SIGBREAK is Ctrl+Break, not the window's X.** Closing a console window sends
+  CTRL_CLOSE_EVENT, which the signal module does not carry at all; the same goes
+  for logging off and shutting down. They arrive only through
+  SetConsoleCtrlHandler, which `app/console_win.py` now registers. Windows ends
+  the process a few seconds after that handler returns, so it closes the session
+  itself with a short wait rather than asking the server to stop and waiting on
+  a worker that may be sixty seconds from finishing.
 - A killed process cannot clean up, so each session locks a file in its folder
   and every start sweeps folders whose lock can be taken. Do not replace this
   with a process-id check: on Windows `os.kill(pid, 0)` ends the process.
@@ -168,8 +176,52 @@ page. Section 6B is about that.
 - Never call `ocr.available()` or `ner.available()` from a request handler:
   they load models. The worker thread loads them and `/api/health` reports
   `null` until it has.
-- A bare `http://127.0.0.1:<port>/` gives 401 by design. The tab must be opened
-  from the launch address, which sets the cookie.
+- The guard is on `/api/`, and `/api/health` is outside it so the page can ping
+  without the cookie. A bare `http://127.0.0.1:<port>/` therefore serves the
+  built UI with no cookie at all - it is a static shell, and every call it makes
+  for data gets 401 until the tab has been opened from the launch address. (An
+  earlier note here said `/` itself gave 401. It does not, and never did.)
+
+## 4A. Proven on Windows (2026-09-22)
+
+The development machine is an Intel Mac, so everything below had only CI behind
+it. A clean Windows 11 machine, Python 3.13.15, Node 24.19.0, from a fresh clone.
+
+**What held.** `ruff` clean and 94 tests green in 36 s. `npm ci` (252 packages, no
+vulnerabilities) and the Vite build into `app/static`. The checker over a
+twenty-document corpus in 42 s, every failure mode caught and every verdict the
+expected one bar the sender's own address on three controls - the documented
+false positive, and the ignore list took it from three to none with no recall
+lost. Both models load (`ocr` and `ner` both true in `/api/health`). A free port,
+the launch token, the HttpOnly cookie, 401 without it and 403 on a wrong one.
+Upload, verdict, page image and export. The browser tab opens by itself, the
+folder picker reads a folder, the boxes land on the page.
+
+**What the temporary folder does on each road out**, checked one at a time:
+Quit and Ctrl+Break delete it; closing the tab deletes it two minutes later; a
+`taskkill /F` leaves it and the next start sweeps it, document copies and all.
+Closing the console window used to leave it too - that is what §4 and
+`console_win.py` are now about.
+
+**What could not be tested, and why.** CTRL_CLOSE_EVENT cannot be generated:
+`GenerateConsoleCtrlEvent` only sends Ctrl+C and Ctrl+Break, and on Windows 11 a
+console app's window belongs to Windows Terminal, so `FindWindow` cannot reach it
+to post WM_CLOSE either. It takes a person clicking the X. Ctrl+C is no easier:
+sending it needs the child in its own process group, and `CREATE_NEW_PROCESS_GROUP`
+disables Ctrl+C for that group, so a test of it proves nothing either way.
+
+**Two things to know before trusting a fresh install.**
+
+- `pip install -e .` fetches the name model from the spaCy releases page, and
+  GitHub answered 504 to that one asset twice in a row while serving every other
+  asset normally - and served the same URL to `curl` without complaint. It looks
+  like HEAD on that path, which is what pip sends first. The README now says to
+  try again or fetch the wheel by hand. It is the only download that is not PyPI,
+  and it is the only part of the install that can fail this way.
+- The pins resolved to onnxruntime **1.30.0** here against the 1.23.2 in §1. Both
+  satisfy `>=1.20,<2`, so an install today does not reproduce the runtime the
+  evaluation figures were measured on. Nothing looked different, but if a number
+  ever moves without the code moving, look here first.
 
 ## 5. Rules to keep
 
@@ -195,9 +247,11 @@ page. Section 6B is about that.
 
 ### A. Before the repository goes public (an hour or two)
 
-1. **Run it on a real Windows machine.** CI proves the tests; it does not prove
-   the browser tab opening, the folder picker, Quit, or that closing the console
-   window cleans up `%TEMP%\usefulredact-session-*`. Check each by hand.
+1. ~~**Run it on a real Windows machine.**~~ Done 2026-09-22, see §4A. The tab,
+   the folder picker, Quit and every other road out were checked by hand;
+   closing the console window turned out to leave `%TEMP%\usefulredact-session-*`
+   behind and now does not. What remains from it: the two install notes at the
+   end of §4A, and items 18 and 19 below.
 2. **Read the README on GitHub as a stranger would.** Do both pictures render,
    do the wide tables fit. The clone-and-run steps were followed from a clean
    clone on macOS on 2026-09-22 and work as written, with `pip install -e .`
@@ -260,6 +314,25 @@ page. Section 6B is about that.
     for a macOS bundle and a Windows installer (Milestone 5); the spaCy model
     has to be bundled beside the three OCR models.
 17. **An option to mask matched text in exports**, and DOCX input (Milestone 5).
+
+### E. Found while testing on Windows (§4A)
+
+18. **The tab outlives its server.** Close the console window and the page is
+    still sitting there with nothing behind it. It should say so plainly: the
+    health ping is already the mechanism, and "no issues found" must not be what
+    a reader sees on a page whose server has gone.
+19. **Pin onnxruntime to the version the figures were measured on**, or say in
+    the README that the runtime floats. A fresh install today gets 1.30.0 where
+    §1 records 1.23.2. The same question applies to the other `>=` pins; they
+    were chosen to be permissive, and an evaluation claim wants the opposite.
+20. **A wheel with `app/static` inside would end the whole install problem** -
+    no Node, no `npm ci`, no separate model download for anyone who just wants
+    to use the thing. This is item 16 seen from a second angle, and testing on
+    a clean machine is what made it look like the highest-value packaging work
+    rather than the last.
+21. **`.gitattributes`.** The repository has none, so line endings depend on
+    each machine's `core.autocrlf`. It has not bitten yet, and a cross-platform
+    project with a frontend in it will eventually make it bite.
 
 ## 7. Parking lot
 
