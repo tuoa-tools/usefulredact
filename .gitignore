@@ -1,0 +1,23 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.DS_Store
+
+# Runtime outputs are never committed: reports contain whatever PI was found.
+usefulredact_out/
+output*/
+
+# The corpus is regenerated from its seed (python -m usefulredact.corpus); only the
+# evaluation report and chart are kept, in eval/.
+corpus/
+eval/results/
+
+# Build and tooling artefacts.
+app/static/
+dist/
+build/
+*.egg-info/
+.ruff_cache/
+frontend/node_modules/
+frontend/dist/

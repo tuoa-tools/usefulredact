@@ -1,0 +1,60 @@
+[project]
+name = "usefulredact"
+dynamic = ["version"]
+description = "Checks whether the redaction in a document actually holds, entirely on your machine"
+readme = "README.md"
+requires-python = ">=3.13"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Adam Simmons" }]
+dependencies = [
+    # The checker (Milestone 1). Major versions pinned to what was verified together.
+    "rapidocr>=3.9,<4",
+    "onnxruntime>=1.20,<2",
+    "pillow>=10.2",
+    "pymupdf>=1.24.3",  # the first release importable as `pymupdf`
+    "numpy>=1.26,<3",
+    "rapidfuzz>=3.9,<4",
+    "spacy>=3.8.7,<3.9",
+    # The NER model is a wheel on the spaCy releases page, not on PyPI. Pinning it here
+    # means one `pip install` brings it and nothing is fetched at run time.
+    "en_core_web_sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl",
+    # The app (Milestone 4).
+    "fastapi>=0.115",
+    "uvicorn>=0.30",
+    "pydantic>=2.8",
+    "python-multipart>=0.0.9",
+]
+
+[project.scripts]
+usefulredact = "usefulredact.cli:main"
+usefulredact-app = "app.launcher:main"
+
+[project.optional-dependencies]
+# The corpus and the evaluation (Milestones 2 and 3) are development tools, not part of the app.
+eval = ["faker>=30", "matplotlib>=3.9"]
+dev = ["pytest>=8", "httpx>=0.27", "ruff>=0.6", "faker>=30", "matplotlib>=3.9"]
+
+[project.urls]
+Homepage = "https://github.com/tuoa-tools/usefulredact"
+
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.dynamic]
+version = { attr = "usefulredact.__version__" }
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["usefulredact*", "app*"]
+
+[tool.setuptools.package-data]
+app = ["static/**/*"]  # the built UI travels with the package
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+filterwarnings = [
+    # PyMuPDF's SWIG types, on import; nothing of ours.
+    "ignore:builtin type .* has no __module__ attribute:DeprecationWarning",
+]

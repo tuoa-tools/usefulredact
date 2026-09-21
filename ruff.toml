@@ -1,0 +1,10 @@
+line-length = 100
+target-version = "py313"
+# Gitignored folders (.venv, corpus, output) are skipped by default.
+extend-exclude = ["frontend"]
+
+[lint]
+select = ["E", "F", "I", "B", "UP", "ASYNC"]
+
+[lint.isort]
+known-first-party = ["usefulredact", "app"]
