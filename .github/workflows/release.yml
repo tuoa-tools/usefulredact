@@ -1,0 +1,81 @@
+name: Release
+
+# A tag like v0.1.0 builds the wheel and publishes it on the releases page. Running this by
+# hand ("Run workflow") builds and tests the wheel the same way and publishes nothing.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Build the UI into app/static
+        working-directory: frontend
+        run: npm ci && npm run build
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+      - name: Build the wheel
+        run: pip install build && python -m build --wheel
+      - name: The wheel must carry the UI, and its version must be the tag's
+        run: |
+          python - <<'PY'
+          import glob, os, sys, zipfile
+          wheel = glob.glob("dist/*.whl")[0]
+          names = zipfile.ZipFile(wheel).namelist()
+          assert "app/static/index.html" in names, "the UI is not in the wheel"
+          assert any(n.startswith("app/static/assets/") and n.endswith(".js") for n in names)
+          stray = [n for n in names if n.split("/")[0] in ("tests", "corpus", "frontend", "eval")]
+          assert not stray, stray
+          ref = os.environ.get("GITHUB_REF", "")
+          if ref.startswith("refs/tags/v"):
+              version = ref.removeprefix("refs/tags/v")
+              assert f"-{version}-" in wheel, f"tag {version} but wheel {wheel}"
+          print(wheel, len(names), "files")
+          PY
+      - name: Install it somewhere clean and run it, with no Node and no clone
+        run: |
+          python -m venv /tmp/clean
+          /tmp/clean/bin/pip install -q dist/*.whl -c constraints.txt
+          cd /tmp
+          /tmp/clean/bin/usefulredact --version
+          /tmp/clean/bin/usefulredact-app --no-browser --port 8765 > app.log 2>&1 &
+          for i in $(seq 1 120); do grep -q "Open:" app.log && break; sleep 0.5; done
+          url=$(grep -o "http://127.0.0.1:8765/launch?token=[^ ]*" app.log)
+          curl -s -o /dev/null -c jar "$url"
+          curl -s -b jar http://127.0.0.1:8765/ | grep -q "<title>UsefulRedact</title>"
+          test "$(curl -s -o /dev/null -w '%{http_code}' -b jar http://127.0.0.1:8765/api/session)" = 200
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8765/api/session)" = 401
+          curl -s -b jar -X POST http://127.0.0.1:8765/api/quit
+      - uses: actions/upload-artifact@v7
+        with:
+          name: wheel
+          path: dist/*.whl
+          if-no-files-found: error
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          path: artifacts
+          merge-multiple: true
+      - uses: softprops/action-gh-release@v3
+        with:
+          name: UsefulRedact ${{ github.ref_name }}
+          files: artifacts/usefulredact-*.whl
+          body_path: packaging/RELEASE_NOTES.md
+          generate_release_notes: true

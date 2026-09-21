@@ -233,8 +233,8 @@ def report(rows: list[Row], corpus: Path, seed_note: str) -> str:
             f"{matched}/{len(group)} | {base_flagged}/{len(group)} |"
         )
     add(
-        "\nFor the three control methods the right number flagged is 0; for every other "
-        "method it is all of them.\n"
+        "\nThese count documents *flagged*. For the three control methods the right number "
+        "is 0, so anything above it is an error; for every other method it is all of them.\n"
     )
 
     add("## False positives on the controls\n")

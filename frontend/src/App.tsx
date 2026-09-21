@@ -8,17 +8,11 @@ import { DropZone } from './components/DropZone';
 import { ListsPanel } from './components/ListsPanel';
 import { VerdictBadge } from './components/VerdictBadge';
 import type { Dropped } from './lib/files';
+import { healthQueryOptions } from './lib/keepAlive';
 import { parseRoute, writeRoute } from './lib/route';
 import { VERDICTS } from './lib/verdicts';
 
 const POLL_MS = 700;
-const KEEP_ALIVE_MS = 60_000;
-// A ping that fails is not a stopped app: a request can be lost, and a machine waking from
-// sleep drops whatever was in flight. Only after these does the app say it has gone. They
-// are spelled out rather than left to the default, because what depends on them is a screen
-// saying nothing here can be relied on.
-const HEALTH_RETRIES = 2;
-const HEALTH_RETRY_MS = 1_000;
 
 function Welcome() {
   const order = [
@@ -100,9 +94,7 @@ export default function App() {
   const health = useQuery({
     queryKey: ['health'],
     queryFn: api.health,
-    refetchInterval: KEEP_ALIVE_MS, // also tells the app this tab is still open
-    retry: HEALTH_RETRIES,
-    retryDelay: HEALTH_RETRY_MS,
+    ...healthQueryOptions, // also the keep-alive: see lib/keepAlive.ts
   });
   const session = useQuery({
     queryKey: ['session'],
@@ -159,7 +151,7 @@ export default function App() {
     );
   }
 
-  // Only once the retries above are spent: a single failed ping is not a stopped app.
+  // Only once the retries in lib/keepAlive.ts are spent: one failed ping is not a stopped app.
   const stopped = health.isError;
 
   return (

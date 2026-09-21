@@ -27,6 +27,29 @@ hold. One of the "Useful" family of tools from
 [UsefulText](https://github.com/tuoa-tools/usefultext)'s OCR engine and app
 pattern.
 
+## Results at a glance
+
+Measured on a **synthetic** corpus of 60 invented documents, never on real ones
+([the full evaluation](#evaluation), with its limits, is below):
+
+| Documents with an issue, by what was done to them | Flagged by the full pipeline | Flagged by a naive baseline (text layer + regex) |
+|---|---|---|
+| Black box drawn over the text | 6 of 6 | 6 of 6 |
+| Black annotation, never applied | 6 of 6 | 6 of 6 |
+| See-through fill or highlight | 6 of 6 | 6 of 6 |
+| Black image pasted over the text | 6 of 6 | 6 of 6 |
+| No redaction at all | 6 of 6 | 6 of 6 |
+| Scan, marker pen at 60% opacity | 6 of 6 | **0 of 6** |
+| Scan, marker pen at 85% opacity | 6 of 6 | **0 of 6** |
+| **All documents with an issue (recall)** | **42 of 42 (100%)** | **30 of 42 (71%)** |
+
+These count documents, not every piece of personal information in them. Of the
+18 documents with nothing wrong, where the right number to flag is none, 10
+were flagged: nine for the sending
+organisation's own street address or landline, which the checker cannot tell
+from a person's, and one where the name model took a firm's name for a
+person's. With each sender's own details on an ignore list, none were flagged.
+
 ## Verdicts
 
 One per document, most serious first:
@@ -111,10 +134,12 @@ documents.
 | Documents with no issue that were flagged (false positives) | 10 of 18 | **0 of 18** | 6 of 18 |
 | Exactly the expected verdict | 50 of 60 | 60 of 60 | it has only one answer |
 
-Every failed redaction was caught, by every route the corpus tries: a box drawn
-over the text, an annotation that was never applied, a see-through fill or
-highlight, a black image pasted on top, and marker pen over a scan at 60% and
-85% opacity. The baseline catches the digital ones, since the words are
+Every document with a failed redaction was flagged, by every route the corpus
+tries: a box drawn over the text, an annotation that was never applied, a
+see-through fill or highlight, a black image pasted on top, and marker pen over
+a scan at 60% and 85% opacity. That is a statement about documents, not about
+every piece of PI in them: the last table in this section counts those, and a
+few were missed. The baseline flags the digital documents, since the words are
 sitting in the text layer, and none of the scans.
 
 **The false positives are the honest part.** Half the letters in every method
@@ -126,18 +151,39 @@ on the ignore list, which is how the tool is meant to be used, none remain.
 
 ![Documents handled correctly, by redaction method: full pipeline, full pipeline with an ignore list, and the baseline](eval/eval_chart.png)
 
-| Method | What was done | Expected | Full pipeline flagged | Baseline flagged |
+The chart counts documents handled *correctly*; the two tables below count
+documents *flagged*. For the seven methods with an issue those are the same
+thing. For the three controls they are opposites: 4 of 6 flagged is 2 of 6
+handled correctly, and 0 of 6 flagged is the right answer.
+
+**Recall by redaction method** (documents with an issue that were flagged; the
+right answer is all of them):
+
+| Method | What was done | Expected verdict | Full pipeline | Baseline: text layer + regex |
 |---|---|---|---|---|
-| `m1_none` | no redaction | `PI_VISIBLE` | 6/6 | 6/6 |
-| `m3_drawn_box` | black rectangle drawn over live text | `FAIL_RECOVERABLE` | 6/6 | 6/6 |
-| `m4_annotation` | black annotation, never applied | `FAIL_RECOVERABLE` | 6/6 | 6/6 |
-| `m5_see_through` | dark see-through fill or highlight | `FAIL_RECOVERABLE` | 6/6 | 6/6 |
-| `m8_pasted_image` | black image pasted over live text | `FAIL_RECOVERABLE` | 6/6 | 6/6 |
-| `m6_scan_marker_60` | scan, marker at 60% opacity | `PI_VISIBLE` | 6/6 | 0/6 |
-| `m6_scan_marker_85` | scan, marker at 85% opacity | `PI_VISIBLE` | 6/6 | 0/6 |
-| `m2_proper` | control: redaction properly applied | `NO_ISSUES_FOUND` | 3/6, then 0/6 with the ignore list | 3/6 |
-| `m6_scan_marker_100` | control: scan, fully opaque marker | `NO_ISSUES_FOUND` | 3/6, then 0/6 | 0/6 |
-| `m7_control` | control: no PI in the document | `NO_ISSUES_FOUND` | 4/6, then 0/6 | 3/6 |
+| `m1_none` | no redaction | `PI_VISIBLE` | 6/6 (100%) | 6/6 (100%) |
+| `m3_drawn_box` | black rectangle drawn over live text | `FAIL_RECOVERABLE` | 6/6 (100%) | 6/6 (100%) |
+| `m4_annotation` | black annotation, never applied | `FAIL_RECOVERABLE` | 6/6 (100%) | 6/6 (100%) |
+| `m5_see_through` | dark see-through fill or highlight | `FAIL_RECOVERABLE` | 6/6 (100%) | 6/6 (100%) |
+| `m8_pasted_image` | black image pasted over live text | `FAIL_RECOVERABLE` | 6/6 (100%) | 6/6 (100%) |
+| `m6_scan_marker_60` | scan, marker at 60% opacity | `PI_VISIBLE` | 6/6 (100%) | 0/6 (0%) |
+| `m6_scan_marker_85` | scan, marker at 85% opacity | `PI_VISIBLE` | 6/6 (100%) | 0/6 (0%) |
+| | **all seven** | | **42/42 (100%)** | **30/42 (71%)** |
+
+The baseline flags a failed redaction in a digital PDF as readily as the full
+pipeline does, and gives the same answer for all of them: "there is PI in the
+text layer". It cannot say that the text is under a box someone believed had
+removed it, which is the finding that matters, and it cannot read a scan at all.
+
+**False positives on the controls** (documents with no issue that were flagged;
+the right answer is 0 of 6, so every number here is a count of errors):
+
+| Method | What was done | Full pipeline | With the sender's details on the ignore list | Baseline |
+|---|---|---|---|---|
+| `m2_proper` | redaction properly applied | 3/6 | 0/6 | 3/6 |
+| `m6_scan_marker_100` | scan, fully opaque marker | 3/6 | 0/6 | 0/6 |
+| `m7_control` | no PI in the document | 4/6 | 0/6 | 3/6 |
+| | **all three** | **10/18** | **0/18** | **6/18** |
 
 A document is flagged if *any* of its PI is found, so the table above hides
 individual misses. Counted piece by piece, where the PI is there to be read:
@@ -154,6 +200,16 @@ individual misses. Counted piece by piece, where the PI is there to be read:
 
 A digital PDF takes about 0.1 s; a scanned page about 6 s (two OCR passes, CPU
 only, on a 2019 Intel laptop).
+
+The figures were measured with the package versions in
+[constraints.txt](constraints.txt) (ONNX Runtime 1.23.2, RapidOCR 3.9.2, spaCy
+3.8.16, PyMuPDF 1.28.2), which is also what CI installs. An install without
+that file takes the newest versions `pyproject.toml` allows. That was tried by
+hand on Windows with ONNX Runtime 1.30 on a 20-document corpus: every document
+with a failed redaction was flagged, and the only verdicts that differed from
+the expected ones were the false positives described above. A neural model on a different
+runtime is not promised to read every character identically, though, so the
+file is there for anyone who wants these exact numbers.
 <!-- results:end -->
 
 The full report, with every false positive and its cause, is in
@@ -187,19 +243,37 @@ python -m usefulredact.evaluate
 ## Install and run
 
 Python 3.13, on Windows, macOS or Linux. Everything installs with pip; there is
-nothing else to download (no Tesseract).
+nothing else to download (no Tesseract, no Node).
+
+**From a release.** The wheel on the
+[releases page](https://github.com/tuoa-tools/usefulredact/releases) has the
+app's UI inside it:
+
+```
+python3.13 -m venv .venv
+.venv/bin/pip install https://github.com/tuoa-tools/usefulredact/releases/download/v0.1.0/usefulredact-0.1.0-py3-none-any.whl
+.venv/bin/usefulredact-app
+```
+
+On Windows the commands are `.venv\Scripts\pip` and `.venv\Scripts\usefulredact-app`.
+
+**From source**, to work on it or to reproduce the evaluation:
 
 ```
 git clone https://github.com/tuoa-tools/usefulredact
 cd usefulredact
 python3.13 -m venv .venv
-.venv/bin/pip install -e .            # Windows: .venv\Scripts\pip install -e .
+.venv/bin/pip install -e . -c constraints.txt
 ```
 
-The name model is a wheel on the spaCy releases page rather than on PyPI, so that
-one download comes from GitHub. If it fails with a gateway error, GitHub is having
-a moment: run the same command again, or fetch the wheel yourself and install it
-from the file.
+`-c constraints.txt` installs the versions the tests and the evaluation were
+run with; leave it off to take the newest that `pyproject.toml` allows. The UI
+is built separately from source (see [The app](#the-app)).
+
+Either way, the name model is a wheel on the spaCy releases page rather than on
+PyPI, so that one download comes from GitHub. If it fails with a gateway error,
+GitHub is having a moment: run the same command again, or fetch the wheel
+yourself and install it from the file.
 
 ### The command line
 
@@ -214,7 +288,8 @@ status 1 when anything is flagged, for use in a script.
 
 ### The app
 
-The UI is built once with Node 24:
+Installed from a release, run `.venv/bin/usefulredact-app`. From source, build
+the UI once first, with Node 24:
 
 ```
 cd frontend && npm ci && npm run build && cd ..
@@ -225,7 +300,9 @@ It opens in a browser tab. Drop in files or a folder; each gets a verdict badge;
 open one to see every finding boxed on the page, with the text that was
 recovered beside it. Click a box or a row to find the other. For a PDF, "draw
 the page without its annotations" shows what an annotation was covering.
-Closing the tab stops the app after two minutes, once nothing is being checked.
+Closing the tab stops the app after two minutes, once nothing is being checked;
+having another tab in front does not. If the app stops while the tab is still
+open, the page says so and what it was showing can no longer be read as current.
 
 ## Privacy
 

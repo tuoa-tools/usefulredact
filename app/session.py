@@ -29,7 +29,7 @@ from usefulredact.pipeline import SUPPORTED_EXTS, check_document
 log = logging.getLogger(__name__)
 PREFIX = "usefulredact-session-"
 LOCK_NAME = ".lock"
-STALE_SECONDS = 24 * 3600
+UNLOCKED_GRACE_SECONDS = 60.0  # see _owner_is_gone
 CLOSE_WAIT_SECONDS = 60.0  # a scanned page can take several seconds to finish
 # Windows ends the process a few seconds after a console-close handler returns, so that
 # road cannot afford the wait above: it takes what it can get and leaves the rest to the
@@ -73,8 +73,11 @@ def _owner_is_gone(folder: Path) -> bool:
     lock that can be taken means nobody is using the folder. (Asking whether a process id
     is alive is not an option: on Windows, os.kill(pid, 0) ends the process.)"""
     lock = folder / LOCK_NAME
-    if not lock.exists():  # not one of ours, or made before locks: go by age
-        return time.time() - folder.stat().st_mtime > STALE_SECONDS
+    if not lock.exists():
+        # A live session always has its lock file, so this is what is left of a clean-up
+        # that was cut short. The grace is for the instant between a new session making
+        # its folder and making its lock, when a second app starting must not take it.
+        return time.time() - folder.stat().st_mtime > UNLOCKED_GRACE_SECONDS
     try:
         with open(lock, "r+b") as handle:
             return _try_lock(handle)
@@ -213,7 +216,14 @@ class Session:
         self.docs.clear()  # nothing further in the queue is worth checking
         self._queue.put(None)
         self._thread.join(timeout=wait)
-        self._lock_file.close()  # releases the lock; Windows needs it closed to delete it
+        if self._thread.is_alive():
+            # The worker still has a document open, which on Windows cannot be deleted, so
+            # part of the folder is about to be left behind. Keep the lock file with it
+            # (open, so it cannot be deleted either): the lock dies with the process, and
+            # the next start then knows the folder at once for what it is.
+            log.warning("a document was still being read; the next start deletes its copy")
+        else:
+            self._lock_file.close()  # releases the lock; Windows needs it closed to delete
         for _ in range(5):
             shutil.rmtree(self.dir, ignore_errors=True)
             if not self.dir.exists():

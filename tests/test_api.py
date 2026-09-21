@@ -176,16 +176,53 @@ def test_a_killed_sessions_folder_is_swept_at_the_next_start(tmp_path, monkeypat
     assert not running.dir.exists()
 
 
-def test_stale_session_folders_are_swept(tmp_path):
+def test_a_folder_left_by_a_clean_up_cut_short_is_swept(tmp_path):
+    """Windows ends a process a few seconds after its console is closed. A clean-up cut
+    off part-way can leave a copy behind with no lock file beside it; that must not wait
+    a day to be swept. Only a folder made this instant is spared, since a session that is
+    just starting makes its folder a moment before its lock."""
     import os
 
-    old, fresh = tmp_path / f"{PREFIX}old", tmp_path / f"{PREFIX}fresh"
-    old.mkdir()
-    fresh.mkdir()
-    past = time.time() - 3 * 24 * 3600
-    os.utime(old, (past, past))
+    cut_short, starting = tmp_path / f"{PREFIX}cutshort", tmp_path / f"{PREFIX}starting"
+    cut_short.mkdir()
+    (cut_short / "doc.pdf").write_bytes(b"a copy of someone's document")
+    starting.mkdir()
+    past = time.time() - 5 * 60
+    os.utime(cut_short, (past, past))
     sweep_stale(tmp_path)
-    assert not old.exists() and fresh.exists()
+    assert not cut_short.exists() and starting.exists()
+
+
+def test_close_keeps_the_lock_beside_a_copy_it_could_not_delete(tmp_path, monkeypatch):
+    """If the worker will not let go in time, whatever is left must still be recognisable
+    to the next start: the lock file stays with it."""
+    import threading
+
+    monkeypatch.setattr("tempfile.tempdir", str(tmp_path))
+    session = Session()
+    release = threading.Event()
+    stuck = threading.Thread(target=release.wait, daemon=True)  # a worker mid-document
+    stuck.start()
+    real_worker, session._thread = session._thread, stuck
+    try:
+        session.close(wait=0.1)
+        assert not session._lock_file.closed  # still held: it dies with the process
+    finally:
+        release.set()
+        session._queue.put(None)
+        real_worker.join(timeout=5)
+        session._lock_file.close()
+
+
+def test_the_page_and_the_server_agree_on_the_idle_limit():
+    """The page pings to say the tab is open; the server stops after IDLE_SECONDS without
+    one. The page's copy of that number lives in frontend/src/lib/keepAlive.ts."""
+    import re
+    from pathlib import Path
+
+    source = (Path(__file__).parents[1] / "frontend/src/lib/keepAlive.ts").read_text("utf-8")
+    page_ms = int(re.search(r"SERVER_IDLE_MS = ([\d_]+)", source).group(1).replace("_", ""))
+    assert page_ms == main.IDLE_SECONDS * 1000
 
 
 def test_desktop_mode_needs_the_launch_token(monkeypatch):

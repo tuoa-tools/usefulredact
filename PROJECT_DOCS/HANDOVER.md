@@ -33,17 +33,19 @@ app/
 frontend/                React 19 + Vite + TypeScript + Tailwind 4 + TanStack Query
   src/App.tsx            header, drop zone, lists, document list, export
   src/components/        DocumentView (page + boxes + findings), DropZone, ListsPanel, ...
-  src/lib/               verdicts (all wording), boxes (percent positions), files, route
+  src/lib/               verdicts (all wording), boxes, files, route, keepAlive (the ping)
 tests/                   pytest; fixtures are generated, nothing is downloaded
 eval/                    eval_report.md and eval_chart.png (tracked); results/ is ignored
 docs/screenshot.png      the README picture, taken from the running app
 PROJECT_DOCS/            BRIEF.md (specification), this file
+constraints.txt          the exact versions the tests and the evaluation ran with
+packaging/               RELEASE_NOTES.md, used by .github/workflows/release.yml
 ```
 
 Ignored and regenerated: `corpus/` (from its seed), `app/static/` (the built
 UI), `eval/results/`, `usefulredact_out/`.
 
-Environment: Python 3.13, `.venv` from `pip install -e ".[dev]"`. Verified
+Environment: Python 3.13, `.venv` from `pip install -e ".[dev]" -c constraints.txt`. Verified
 together: rapidocr 3.9.2, onnxruntime 1.23.2, pymupdf 1.28.2, spacy 3.8.16
 with en_core_web_sm 3.8.0 (a pinned wheel URL in `pyproject.toml`), rapidfuzz
 3.14.6, fastapi 0.141, numpy 2.5, pillow 12.3. Node 24 for the UI. The
@@ -176,6 +178,20 @@ page. Section 6B is about that.
 - Never call `ocr.available()` or `ner.available()` from a request handler:
   they load models. The worker thread loads them and `/api/health` reports
   `null` until it has.
+- **The keep-alive must keep going while the tab is hidden.** TanStack Query
+  stops interval refetching in a background tab unless told otherwise
+  (`refetchIntervalInBackground`). UsefulText sets it; it was dropped in the
+  port, so two minutes with another tab in front stopped the app and deleted
+  the results. Browsers also throttle a long-hidden tab's timers to once a
+  minute, so the ping is every 30 s, not 60, to stay inside the server's 120 s.
+  The settings and their reasons are in `frontend/src/lib/keepAlive.ts`, with a
+  test, and a Python test holds the page's copy of the limit to the server's.
+- **A clean-up cut short must still be sweepable.** A folder with no lock file
+  used to fall back to a 24-hour age rule, so a partial delete that took the
+  lock file and left a document would have sat for a day. Now `close()` keeps
+  the lock file (open, so Windows cannot delete it) whenever the worker has not
+  let go, and a folder with no lock at all is swept after 60 s, the grace being
+  for a session that has made its folder and not yet its lock.
 - The guard is on `/api/`, and `/api/health` is outside it so the page can ping
   without the cookie. A bare `http://127.0.0.1:<port>/` therefore serves the
   built UI with no cookie at all - it is a static shell, and every call it makes
@@ -252,12 +268,25 @@ disables Ctrl+C for that group, so a test of it proves nothing either way.
    closing the console window turned out to leave `%TEMP%\usefulredact-session-*`
    behind and now does not. What remains from it: the two install notes at the
    end of §4A, and items 18 and 19 below.
-2. **Read the README on GitHub as a stranger would.** Do both pictures render,
-   do the wide tables fit. The clone-and-run steps were followed from a clean
-   clone on macOS on 2026-09-22 and work as written, with `pip install -e .`
-   alone; the same has not been done on Windows.
-3. **Tag `v0.1.0`**, make the repository public, and add topics (redaction,
-   privacy, pdf, ocr). The README's clone address only works once it is public.
+2. ~~**Read the README on GitHub as a stranger would.**~~ Done 2026-09-22, by
+   rendering it with GitHub's own markdown API and reading the result. Both
+   pictures render, every table fits the column, and the clone-and-run steps
+   work from a clean clone on macOS and on Windows (§4A). What reading it
+   changed: a "Results at a glance" table now sits straight after the
+   introduction (recall per redaction method, full pipeline against the naive
+   baseline, labelled synthetic), since that is what a visitor came for and it
+   was two screens down; the per-method table was split into recall and false
+   positives, because "3/6 flagged" is a score on one and an error count on the
+   other; "every failed redaction was caught" became "every document with a
+   failed redaction was flagged", which is what was measured; and a line now
+   ties the chart (documents handled correctly) to the tables (documents
+   flagged). One trap: the API's `gfm` mode renders as a *comment* does and
+   turns every source line break into `<br>`; a README file is `markdown` mode.
+3. **Tag `v0.1.0`** and make the repository public, and add topics (redaction,
+   privacy, pdf, ocr). Pushing the tag runs `.github/workflows/release.yml`,
+   which builds the wheel with the UI inside and publishes it on the releases
+   page. The README's clone address and its wheel address both only work once
+   the repository is public and the tag exists.
 4. **In UsefulText**, reword the first line of `usefultext/ocr.py`'s docstring,
    which still describes where that file came from before UsefulText.
 
@@ -308,52 +337,35 @@ disables Ctrl+C for that group, so a test of it proves nothing either way.
     session, and carry that into the export, which then becomes a review record.
 15. **Keys and zoom.** Next and previous finding from the keyboard; zoom on the
     page. Zoom was the first thing cut.
-16. **Install without Node.** A release workflow that builds the UI, builds a
-    wheel with `app/static` inside, and attaches it to a GitHub Release, so
-    `pip install <wheel>` gives the app. Then UsefulText's packaging pipeline
-    for a macOS bundle and a Windows installer (Milestone 5); the spaCy model
-    has to be bundled beside the three OCR models.
+16. **Installers.** The wheel half of this is done (item 20): a release carries a
+    wheel with `app/static` inside, so `pip install <wheel>` gives the app with
+    no Node. What is left is UsefulText's packaging pipeline for a macOS bundle
+    and a Windows installer (Milestone 5), for people without Python; the spaCy
+    model has to be bundled beside the three OCR models.
 17. **An option to mask matched text in exports**, and DOCX input (Milestone 5).
 
 ### E. Found while testing on Windows (§4A)
 
-18. **The tab outlives its server.** Close the console window - or let the app
-    stop by itself while the tab is in the background - and the page sits there
-    with nothing behind it, still showing verdicts and findings. A reader cannot
-    tell the difference between a verdict and the memory of one, and "no issues
-    found" is the last thing that should be readable on a page whose server has
-    gone. This is the same class of harm the wording rules in section 5 exist to
-    prevent, which is why it comes first in this list.
-
-    The mechanism is already there: `health` in `frontend/src/App.tsx` polls
-    `/api/health` every `KEEP_ALIVE_MS` and is what tells the app the tab is
-    still open. What is missing is the failure branch - `health.isError` after
-    its retries, meaning the server is gone rather than slow. The screen for it
-    can follow the one immediately below, the `quit_requested` block, which
-    already says "UsefulRedact has stopped" and is what a deliberate Quit
-    shows; the difference is that this one was not asked for, so it should say
-    the app is no longer running and that what was on screen was a check, not a
-    record, rather than implying anything was deleted or kept. Whether it
-    replaces the page or covers it is a judgement: replacing is safer and
-    loses the findings a person may still be reading, so covering with the
-    findings visibly inert behind it is probably better, and either way nothing
-    underneath may stay clickable.
-
-    Take care that a slow first load, a machine waking from sleep and the two
-    minutes of idle shutdown are not mistaken for it; TanStack Query's retry
-    and the keep-alive interval decide that, and the test should pin whichever
-    is chosen. `frontend/src/lib/verdicts.test.ts` already fails the build on
-    "safe", "secure", "clean" and "passed": the new wording has to pass that
-    too, and deserves its own test with the health query in an error state.
-19. **Pin onnxruntime to the version the figures were measured on**, or say in
-    the README that the runtime floats. A fresh install today gets 1.30.0 where
-    §1 records 1.23.2. The same question applies to the other `>=` pins; they
-    were chosen to be permissive, and an evaluation claim wants the opposite.
-20. **A wheel with `app/static` inside would end the whole install problem** -
-    no Node, no `npm ci`, no separate model download for anyone who just wants
-    to use the thing. This is item 16 seen from a second angle, and testing on
-    a clean machine is what made it look like the highest-value packaging work
-    rather than the last.
+18. ~~**The tab outlives its server.**~~ Done (pull request #2). When the health
+    ping fails after its retries, the page is covered and made `inert` and says
+    the app is no longer running; it does not claim the copies were deleted,
+    because from inside the page there is no telling. The cause of the commonest
+    case was found afterwards and is in §4: the ping stopped whenever the tab was
+    hidden, so the app was stopping itself under people who were reading
+    something else.
+19. ~~**Pin onnxruntime.**~~ Done. `constraints.txt` records every version the
+    tests and the evaluation were run with; CI installs with it on all three
+    systems, so that set is what is proven, and a new upstream release cannot
+    turn a build red. `pyproject.toml` keeps its ranges, and the README says
+    which install gives which. Regenerate the file whenever the evaluation is
+    re-run (the command is at the top of it).
+20. ~~**A wheel with `app/static` inside.**~~ Done. `release.yml` builds the UI,
+    builds the wheel, checks the UI is in it and the version matches the tag,
+    installs it into an empty environment and starts the app, then publishes it.
+    "Run workflow" does all but the last step. Checked by hand as well: the
+    160 KB wheel, installed into an empty venv in another folder, serves the UI
+    and catches a failed redaction. It does not end the name-model download,
+    which still comes from GitHub at install time (§4A).
 21. **`.gitattributes`.** The repository has none, so line endings depend on
     each machine's `core.autocrlf`. It has not bitten yet, and a cross-platform
     project with a frontend in it will eventually make it bite.

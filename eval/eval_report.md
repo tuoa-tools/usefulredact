@@ -34,7 +34,7 @@ An *issue* is any verdict other than `NO_ISSUES_FOUND`. The middle column is the
 | `m7_control` | control: the document never held any PI | `NO_ISSUES_FOUND` | 6 | 4/6 | 2/6 | 3/6 |
 | `m8_pasted_image` | black image pasted over live text | `FAIL_RECOVERABLE` | 6 | 6/6 | 6/6 | 6/6 |
 
-For the three control methods the right number flagged is 0; for every other method it is all of them.
+These count documents *flagged*. For the three control methods the right number is 0, so anything above it is an error; for every other method it is all of them.
 
 ## False positives on the controls
 
