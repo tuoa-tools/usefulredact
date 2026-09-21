@@ -8,8 +8,9 @@ reading anything anyway. The server binds to 127.0.0.1, so nothing off this mach
 reach it at all.
 
 Shutdown: there is no window to close, so the server exits by itself once the page has
-stopped pinging /api/health for two minutes and nothing is being checked. Ctrl+C and
-/api/quit do the same. Either way the session's temporary folder is deleted.
+stopped pinging /api/health for two minutes and nothing is being checked. Ctrl+C, a
+termination signal and /api/quit do the same. Either way the session's temporary folder
+is deleted; a process killed outright leaves it for the next start to sweep.
 
 Nothing is logged to a file: a log that named documents would outlive the session.
 """
@@ -20,6 +21,7 @@ import argparse
 import logging
 import os
 import secrets
+import signal
 import socket
 import sys
 import threading
@@ -80,6 +82,12 @@ def main(argv: list[str] | None = None) -> int:
         server.should_exit = True
 
     app.state.on_quit = quit_all
+    # uvicorn only installs signal handlers when it runs in the main thread, and here it
+    # does not: without this, `kill` would end the process with the session folder
+    # (the copies of the documents) still on disk.
+    signal.signal(signal.SIGTERM, lambda *_: quit_all())
+    if hasattr(signal, "SIGBREAK"):  # Ctrl+Break, and what Windows sends on console close
+        signal.signal(signal.SIGBREAK, lambda *_: quit_all())
     app.state.idle_shutdown = not args.no_browser  # a tab can be closed without telling us
     url = launch_url(port, token)
 
@@ -89,7 +97,11 @@ def main(argv: list[str] | None = None) -> int:
         if not wait_until_started(server, thread):
             log.error("the server did not start")
             return 1
-        print(f"UsefulRedact {app.version} is running on this machine only.\nOpen: {url}")
+        # flush: with the output piped or redirected, a buffered line would never show
+        print(
+            f"UsefulRedact {app.version} is running on this machine only.\nOpen: {url}",
+            flush=True,
+        )
         if not args.no_browser:
             webbrowser.open(url)
         while thread.is_alive():

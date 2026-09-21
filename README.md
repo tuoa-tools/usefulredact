@@ -230,9 +230,11 @@ Closing the tab stops the app after two minutes, once nothing is being checked.
   secret.
 - **No telemetry**, of any kind.
 - **Nothing is kept.** The app copies dropped files into a private temporary
-  folder to read them, and deletes it when it stops (a folder left behind by a
-  crash is swept on the next start). The watchlist and ignore list live in
-  memory. Nothing is logged to a file.
+  folder to read them, and deletes it when it stops: on Quit, when the tab has
+  been closed for two minutes, on Ctrl+C, on a termination signal. A process
+  that is killed outright (`kill -9`, a power cut) cannot clean up after
+  itself; the next start finds that folder and deletes it. The watchlist and
+  ignore list live in memory. Nothing is logged to a file.
 - **Your files are only read**, never written to.
 - **A report contains the personal information that was found.** That is the
   evidence a person needs to confirm each finding. Keep exported reports where

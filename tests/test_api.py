@@ -12,7 +12,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app import main
-from app.session import PREFIX, sweep_stale
+from app.session import LOCK_NAME, PREFIX, Session, sweep_stale
 
 
 def wait_done(client: TestClient, timeout: float = 120.0) -> dict:
@@ -98,17 +98,21 @@ def copies(folder, expected: int, timeout: float = 30.0) -> int:
     """How many copies are in the session folder, once it has settled. A copy the worker
     is reading is deleted when the worker lets go of it, which on Windows is the only
     time it can be."""
+
+    def count() -> int:
+        return sum(1 for p in folder.iterdir() if p.name != LOCK_NAME)
+
     deadline = time.monotonic() + timeout
-    while len(list(folder.iterdir())) != expected and time.monotonic() < deadline:
+    while count() != expected and time.monotonic() < deadline:
         time.sleep(0.1)
-    return len(list(folder.iterdir()))
+    return count()
 
 
 def test_remove_and_clear_delete_the_copies(client, made):
     path, _ = made["m7_control"]
     upload(client, path, path)
     folder = client.app.state.session.dir
-    assert len(list(folder.iterdir())) == 2
+    assert copies(folder, 2) == 2
     first = client.get("/api/session").json()["documents"][0]["id"]
     # straight away, while the worker may still have the file open
     assert client.delete(f"/api/documents/{first}").status_code == 200
@@ -122,8 +126,6 @@ def test_remove_and_clear_delete_the_copies(client, made):
 def test_a_copy_in_use_is_deleted_when_it_is_released(tmp_path, monkeypatch):
     """What Windows does to an open file, made to happen anywhere."""
     from pathlib import Path
-
-    from app.session import Session
 
     session = Session()
     try:
@@ -152,6 +154,26 @@ def test_session_folder_is_deleted_on_shutdown(made):
         folder = c.app.state.session.dir
         assert folder.is_dir() and folder.name.startswith(PREFIX)
     assert not folder.exists()
+
+
+def test_a_killed_sessions_folder_is_swept_at_the_next_start(tmp_path, monkeypatch):
+    """A process that is killed cannot clean up. Its lock dies with it, so the next
+    start can tell its folder from that of a session still running."""
+    monkeypatch.setattr("tempfile.tempdir", str(tmp_path))
+    running = Session()
+    try:
+        (running.dir / "doc.pdf").write_bytes(b"x")
+        killed = tmp_path / f"{PREFIX}killed"
+        killed.mkdir()
+        (killed / LOCK_NAME).write_bytes(b"1")  # a lock file nobody holds any more
+        (killed / "doc.pdf").write_bytes(b"x")
+
+        sweep_stale(tmp_path)
+        assert not killed.exists()  # swept at once, however new it is
+        assert (running.dir / "doc.pdf").exists()  # a live session is left alone
+    finally:
+        running.close()
+    assert not running.dir.exists()
 
 
 def test_stale_session_folders_are_swept(tmp_path):
