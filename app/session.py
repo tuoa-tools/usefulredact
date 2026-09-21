@@ -25,6 +25,7 @@ from usefulredact.pipeline import SUPPORTED_EXTS, check_document
 log = logging.getLogger(__name__)
 PREFIX = "usefulredact-session-"
 STALE_SECONDS = 24 * 3600
+CLOSE_WAIT_SECONDS = 60.0  # a scanned page can take several seconds to finish
 
 
 @dataclass
@@ -59,6 +60,7 @@ class Session:
         self.watchlist = ""
         self.ignore = ""
         self.engines: dict[str, bool | None] = {"ocr": None, "ner": None}  # None: still loading
+        self._undeleted: set[Path] = set()  # copies that were in use when their removal was asked
         self._lock = threading.Lock()
         self._queue: queue.Queue[str | None] = queue.Queue()
         self._thread = threading.Thread(target=self._work, name="usefulredact-worker", daemon=True)
@@ -89,8 +91,24 @@ class Session:
             doc = self.docs.pop(doc_id, None)
         if doc is None:
             return False
-        doc.path.unlink(missing_ok=True)
+        self._delete(doc.path)
         return True
+
+    def _delete(self, path: Path) -> None:
+        """Delete a copy now, or as soon as it can be. Windows will not delete a file
+        that is open, and the worker may be reading this one: it is then deleted the
+        moment the worker is done with it (see _work)."""
+        try:
+            path.unlink(missing_ok=True)
+        except OSError:
+            with self._lock:
+                self._undeleted.add(path)
+
+    def _delete_waiting(self) -> None:
+        with self._lock:
+            waiting, self._undeleted = self._undeleted, set()
+        for path in waiting:
+            self._delete(path)
 
     def clear(self) -> None:
         for doc_id in list(self.docs):
@@ -127,12 +145,21 @@ class Session:
                 doc.page_done, doc.page_total = done, total
 
             result = check_document(doc.path, watchlist=watchlist, ignore=ignore, progress=progress)
+            self._delete_waiting()  # the file is closed again: anything removed meanwhile can go
             result.path = doc.name  # reports name the file as the person knows it
             if (watchlist, ignore) != (self.watchlist, self.ignore):
                 continue  # the lists changed meanwhile; this document is queued again
             doc.result, doc.status = result, "done"
 
     def close(self) -> None:
+        """Stop the worker and delete every copy. The worker finishes the page it is on
+        first, so the folder is not pulled from under an open file (Windows would refuse)."""
+        self.docs.clear()  # nothing further in the queue is worth checking
         self._queue.put(None)
-        self._thread.join(timeout=5)
-        shutil.rmtree(self.dir, ignore_errors=True)
+        self._thread.join(timeout=CLOSE_WAIT_SECONDS)
+        for _ in range(5):
+            shutil.rmtree(self.dir, ignore_errors=True)
+            if not self.dir.exists():
+                return
+            time.sleep(0.2)
+        log.warning("the session folder could not be deleted now; the next start sweeps it")

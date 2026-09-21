@@ -213,3 +213,24 @@ the screenshot; CI green on all three platforms; repo public on `tuoa-tools`.
 - Added principle 6 (nothing is kept) and the session-only design.
 - Settled: verdict precedence, labels for the three marker opacities, the
   spaCy model as a pinned wheel.
+
+## As built (version 0.1.0)
+
+Milestones 1 to 4 are done. What differs from the plan above:
+
+- **An ignore list**, beside the watchlist. The first evaluation run made the need
+  plain: the checker cannot tell an organisation's own street address or landline from a
+  person's, so it flags both until told which are fine.
+- **`NOT_CHECKED`**, a fifth status for a file that cannot be opened (damaged,
+  password-protected, unsupported). It is not a verdict about the document, and it must
+  never read as a pass.
+- **Look-alikes in the corpus are stratified, not random.** With six documents per
+  method, leaving the sender's address and landline to chance handed the controls most
+  of them in one draw and made the methods incomparable.
+- **A second OCR pass** on a contrast-stretched copy of a scan that has dark strokes.
+- **The page drawn without its annotations**, in the app, for a PDF whose marks are
+  annotations: the quickest way to see what they were covering.
+- **The address bar remembers** which document and finding are open (ids only).
+- **A place-name list and a labelled-name rule** around the name model, after it read
+  Australian cities and company names as people.
+- Not done: zoom in the page view; everything in Milestone 5.

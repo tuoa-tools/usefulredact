@@ -94,17 +94,56 @@ def test_lists_recheck_every_document(client, made):
     assert any(f["detector"] == "watchlist" for f in detail["findings"])
 
 
+def copies(folder, expected: int, timeout: float = 30.0) -> int:
+    """How many copies are in the session folder, once it has settled. A copy the worker
+    is reading is deleted when the worker lets go of it, which on Windows is the only
+    time it can be."""
+    deadline = time.monotonic() + timeout
+    while len(list(folder.iterdir())) != expected and time.monotonic() < deadline:
+        time.sleep(0.1)
+    return len(list(folder.iterdir()))
+
+
 def test_remove_and_clear_delete_the_copies(client, made):
     path, _ = made["m7_control"]
     upload(client, path, path)
     folder = client.app.state.session.dir
     assert len(list(folder.iterdir())) == 2
     first = client.get("/api/session").json()["documents"][0]["id"]
+    # straight away, while the worker may still have the file open
     assert client.delete(f"/api/documents/{first}").status_code == 200
-    assert len(list(folder.iterdir())) == 1
+    assert [d["id"] for d in client.get("/api/session").json()["documents"]] != [first]
+    assert copies(folder, 1) == 1
     client.delete("/api/documents")
-    assert list(folder.iterdir()) == []
+    assert copies(folder, 0) == 0
     assert client.delete(f"/api/documents/{first}").status_code == 404
+
+
+def test_a_copy_in_use_is_deleted_when_it_is_released(tmp_path, monkeypatch):
+    """What Windows does to an open file, made to happen anywhere."""
+    from pathlib import Path
+
+    from app.session import Session
+
+    session = Session()
+    try:
+        held = session.dir / "held.pdf"
+        held.write_bytes(b"x")
+        real_unlink, refusals = Path.unlink, [1]
+
+        def unlink(self, missing_ok=False):
+            if self == held and refusals:
+                refusals.pop()
+                raise PermissionError(32, "being used by another process")
+            return real_unlink(self, missing_ok=missing_ok)
+
+        monkeypatch.setattr(Path, "unlink", unlink)
+        session._delete(held)
+        assert held.exists() and held in session._undeleted  # refused: remembered
+        session._delete_waiting()
+        assert not held.exists() and not session._undeleted  # released: gone
+    finally:
+        session.close()
 
 
 def test_session_folder_is_deleted_on_shutdown(made):
