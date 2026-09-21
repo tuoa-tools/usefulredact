@@ -327,6 +327,29 @@ has not already trusted the file. This is the same shape of trap as the
 CTRL_CLOSE_EVENT note above - the convenient way to get the artefact is the way
 that cannot show the problem.
 
+**Uninstalling while the app is running is the interesting case, and it goes
+badly.** The uninstaller makes no attempt to stop the app, so every `.pyd` and
+`.dll` the running interpreter holds is locked: 124 files and 230.6 MB were left
+behind, the log saying `Failed to delete the file; it may be in use (5)` for each.
+It had already removed its own `unins000.exe` and its registry key by then, so
+what is left cannot be finished by any supported means - the program is gone from
+Settings, there is no uninstaller to run again, and 230 MB sits in
+`%LOCALAPPDATA%` with nothing to remove it but hand. What the person is told is
+"UsefulRedact uninstall complete", then "Some elements could not be removed.
+These can be removed manually", which names neither the running app nor what the
+elements are.
+
+**The temporary copies survive better than the install does, but only by luck of
+timing.** The app went on running and serving after being uninstalled, and when
+it was stopped in the ordinary way it deleted its own session folder, document
+copy and all - so the usual sequence ends clean. What does not is any folder
+outstanding at that moment: the sweep runs only when a session is *created*, and
+after an uninstall there is no next start. A folder left by a killed process, or
+by quitting through a reboot, is then stranded for good. One from a force-killed
+instance was still there afterwards and had to be removed by hand. So the
+"nothing is kept" promise rests, at uninstall time, on the app having been
+stopped tidily first - which is exactly what the uninstaller does not ensure.
+
 **One more thing `pythonw` costs.** The launcher already opens the null device
 where its streams should be, so nothing crashes - but the launch address it
 prints goes nowhere, and there is no console. If `webbrowser.open` fails, or the
@@ -503,6 +526,20 @@ when it fails. See §6E item 22.
     or buy a certificate outright. Signing also earns SmartScreen reputation over
     time, which an unsigned build can never accumulate. For a tool whose argument
     is that it protects you, the first minute matters more than usual.
+24. **The uninstaller should stop the app, and sweep what nothing else will.**
+    Two faults, found together (§4B). It does not close the running app, so the
+    loaded runtime is locked and 230 MB survives an uninstall that calls itself
+    complete - and because it removes its own uninstaller and registry key first,
+    there is no supported way to finish. Inno's `CloseApplications`, or a check in
+    `InitializeUninstall` that looks for a `pythonw.exe` running from the install
+    directory and asks the person to quit it, fixes that half. The other half is
+    ours: the sweep only ever runs when a session is created, so a folder
+    outstanding at uninstall time is stranded for good, there being no next start.
+    The uninstaller should do one last sweep of `%TEMP%\usefulredact-session-*`
+    with the same lock test the app uses. The ordinary sequence already ends clean
+    - the app deletes its own folder when stopped, even after being uninstalled -
+    so this is about the person who reboots instead, or force-quits, and whose
+    document copies would then outlive the program that made them.
 
 ## 7. Parking lot
 
