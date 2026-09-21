@@ -1,13 +1,24 @@
 # UsefulRedact — Handover and Next Steps
 
-_Written 2026-09-22, now at version 0.1.2. Milestones 1 to 4 of `BRIEF.md` are
-complete: the checker and its command line, the synthetic corpus, the
-evaluation, and the app. The code is on `main` at
+_Written 2026-09-22, at version 0.1.2. Milestones 1 to 4 of `BRIEF.md` are
+complete (the checker and its command line, the synthetic corpus, the
+evaluation, the app), and so is the packaged release from Milestone 5: a Windows
+installer, macOS apps for Apple Silicon and Intel, a Linux tarball and a wheel,
+on the releases page. The code is on `main` at
 github.com/tuoa-tools/usefulredact, with CI green on Ubuntu, Windows and macOS
-plus the frontend job. The repository was created private; its owner makes it
-public. `BRIEF.md` is the specification (its last section, "As built", lists
-what differs from the plan) and `README.md` is the public account, including
-the evaluation. Read both before this file. Section 6 is what to do next._
+plus the frontend job. `BRIEF.md` is the specification (its last section, "As
+built", lists what differs from the plan) and `README.md` is the public
+account, including the evaluation. Read both before this file._
+
+**Where things stand, in four lines.** It works, it is measured, and it has been
+run by hand on macOS and on a Windows 11 machine, from source and from the
+installer. The repository is still private: making it public is its owner's
+step, and nothing else stands in the way (§6A). Known faults that are written
+down and not yet fixed, in the order they matter: the Windows uninstaller does
+not stop a running app and can strand document copies (§6E item 24); a
+windowless app cannot be found again if its tab is lost (item 22); the
+downloads are unsigned (item 23). The most valuable work after those is making
+the evaluation harder to argue with (§6B).
 
 ## 1. State of the repository
 
@@ -517,7 +528,11 @@ when it fails. See §6E item 22.
     the clipboard as well, or have a second launch find the running app and open
     its tab rather than starting another - `free_port` means two copies do not
     even collide, so today a confused person ends up with several.
-23. **Sign the Windows installer.** It is unsigned (§4B), so a browser download
+23. **Sign the Windows installer.** (The free option below is partly in place: the
+    README's Install section and the release notes already say the downloads are
+    unsigned and how to get past SmartScreen and Gatekeeper. What they do not yet
+    do is show what the warning looks like or say why it appears.)
+    It is unsigned (§4B), so a browser download
     meets SmartScreen's "Windows protected your PC" and the way on is hidden
     behind *More info*. The macOS apps have the same problem with Gatekeeper.
     Three options, in rising cost: say so in the README, with what the warning
@@ -556,6 +571,13 @@ when it fails. See §6E item 22.
 Open it in `/Users/adam/data/Python stuff/usefulredact` and start with:
 
 > Read `PROJECT_DOCS/HANDOVER.md`, then `PROJECT_DOCS/BRIEF.md` and
-> `README.md`. We are at v0.1.2: Milestones 1 to 4, and the packaged releases of Milestone 5. Keep the rules in
-> section 5 of the handover. I want to work on section 6, starting with
-> item __. Before changing anything, run the tests and tell me they pass.
+> `README.md`. We are at v0.1.2, with Milestones 1 to 4 and the packaged
+> releases done. Keep the rules in section 5 of the handover. I want to work on
+> section 6, starting with item __. Before changing anything, run the tests and
+> tell me they pass.
+
+Useful to know before starting: a change to the app needs a new version
+(`__version__`, `frontend/package.json` and its lock, the wheel address in the
+README), a trial run of the release workflow ("Run workflow", which publishes
+nothing), and only then a tag. Chain tests to commits with `&&`. The Windows
+machine has no `gh`; the macOS one does.
