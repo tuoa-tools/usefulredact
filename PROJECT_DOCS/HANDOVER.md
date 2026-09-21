@@ -294,6 +294,47 @@ disables Ctrl+C for that group, so a test of it proves nothing either way.
   evaluation figures were measured on. Nothing looked different, but if a number
   ever moves without the code moving, look here first.
 
+## 4B. The installed build, on Windows by hand (2026-09-22)
+
+v0.1.2's `UsefulRedact-windows-x64-setup.exe` installed and run on the same
+Windows 11 machine as §4A, which has never had this project pip-installed.
+
+**What it does.** A per-user install, so nothing asks for elevation and nothing
+outside the account is touched: 533 MB and 8,528 files into
+`%LOCALAPPDATA%\Programs\UsefulRedact\`, an uninstall key under HKCU, a
+Start-menu folder and a Desktop shortcut, in 33 s. Both shortcuts run
+`pythonw.exe -m app.launcher` rather than the `.cmd` beside them. Launched from
+the Start menu it opened its tab and reported `ocr: true` and `ner: true`, so the
+bundled models load on a machine with no Python of the project's own. The
+installer is Inno Setup, so it takes `/VERYSILENT`, `/DIR=` and `/LOG=`.
+
+**The bundle carries onnxruntime 1.23.2** - the version §1 records as verified,
+not the 1.30.0 a fresh `pip install` resolves to today. The drift noted in §4A is
+therefore narrower than it reads: it is the from-source install that moves, and
+the downloads people actually use match the evaluation.
+
+**It is not signed.** `Get-AuthenticodeSignature` returns NotSigned; the version
+resource carries the product and author name and no certificate. Anyone who
+downloads it in a browser meets SmartScreen's "Windows protected your PC", with
+the only way on hidden behind *More info* - an unlovely first minute for a tool
+whose whole argument is that it protects you.
+
+**And it cannot be tested from a download fetched by `gh` or the API.** Those
+write the file with no Mark of the Web, and SmartScreen keys off exactly that, so
+such a copy is trusted in a way a real one is not: the silent install below met
+nothing. Reproducing what a user meets takes a browser download on a machine that
+has not already trusted the file. This is the same shape of trap as the
+CTRL_CLOSE_EVENT note above - the convenient way to get the artefact is the way
+that cannot show the problem.
+
+**One more thing `pythonw` costs.** The launcher already opens the null device
+where its streams should be, so nothing crashes - but the launch address it
+prints goes nowhere, and there is no console. If `webbrowser.open` fails, or the
+browser opens and the tab is later lost, the app is running with no window, no
+address and no way back to it, and the only way to stop it is Task Manager.
+Nothing about the ordinary path is wrong; there is simply no second way through
+when it fails. See §6E item 22.
+
 ## 5. Rules to keep
 
 - **Fresh build, synthetic data only.** An earlier private prototype exists
@@ -338,13 +379,15 @@ disables Ctrl+C for that group, so a test of it proves nothing either way.
    flagged). One trap: the API's `gfm` mode renders as a *comment* does and
    turns every source line break into `<br>`; a README file is `markdown` mode.
 3. **Install the Windows download on a real Windows machine, and open a macOS one
-   from Finder.** The workflow installs, tests and uninstalls the Windows
-   installer, and the Intel macOS app was opened as an app on the development
-   machine; nobody has yet double-clicked the installer, met SmartScreen or
-   Gatekeeper, or used the Start-menu shortcut (which runs `pythonw.exe`, the
-   runtime with no console). UsefulText's first real install found a fault that
-   a green workflow had not. While the repository is private, fetch a download
-   with `gh release download v0.1.2 --repo tuoa-tools/usefulredact --pattern "*windows*"`.
+   from Finder.** Half done: the Windows installer was installed and run by hand
+   on 2026-09-22 and the installed copy works (§4B). What is still untouched is
+   the part a workflow can never do - **double-clicking it in Explorer and
+   meeting SmartScreen**, which needs a browser download, because a file fetched
+   with `gh` or the API carries no Mark of the Web and slips past the very thing
+   being tested. The uninstaller has been run by CI but not by hand. On macOS,
+   the Intel app was opened on the development machine; nobody has met
+   Gatekeeper. UsefulText's first real install found a fault that a green
+   workflow had not.
 4. **Make the repository public.** The tags (`v0.1.0` to `v0.1.2`) and the topics
    are in place. Pushing a tag runs `.github/workflows/release.yml`, which
    builds the four downloads and the wheel, smoke-tests each, and publishes
@@ -416,7 +459,7 @@ disables Ctrl+C for that group, so a test of it proves nothing either way.
     Neither loses anything: every road out still deletes the session.
 17. **An option to mask matched text in exports**, and DOCX input (Milestone 5).
 
-### E. Found while testing on Windows (§4A)
+### E. Found while testing on Windows (§4A, §4B)
 
 18. ~~**The tab outlives its server.**~~ Done (pull request #2). When the health
     ping fails after its retries, the page is covered and made `inert` and says
@@ -440,6 +483,26 @@ disables Ctrl+C for that group, so a test of it proves nothing either way.
     which still comes from GitHub at install time (§4A).
 21. ~~**`.gitattributes`.**~~ Done. Text is stored with LF on every machine. No
     file in the repository had CRLF when it went in, so nothing else changed.
+
+22. **There is no way back to a windowless app.** The Start-menu shortcut runs
+    `pythonw.exe`, so the launch address is printed into the null device and
+    there is no console. The ordinary path is fine, and the tab knows how to say
+    the app has stopped (item 18). But if `webbrowser.open` fails, or the tab is
+    closed by accident inside the two minutes, the app is running with no window,
+    no address and nothing to click, and Task Manager is the only way out. A
+    tray icon is the full answer and a large one. Cheaper: write the address to
+    the clipboard as well, or have a second launch find the running app and open
+    its tab rather than starting another - `free_port` means two copies do not
+    even collide, so today a confused person ends up with several.
+23. **Sign the Windows installer.** It is unsigned (§4B), so a browser download
+    meets SmartScreen's "Windows protected your PC" and the way on is hidden
+    behind *More info*. The macOS apps have the same problem with Gatekeeper.
+    Three options, in rising cost: say so in the README, with what the warning
+    looks like and why it appears, which costs nothing and stops the tool looking
+    broken; sign with Azure Trusted Signing, which is inexpensive and yearly;
+    or buy a certificate outright. Signing also earns SmartScreen reputation over
+    time, which an unsigned build can never accumulate. For a tool whose argument
+    is that it protects you, the first minute matters more than usual.
 
 ## 7. Parking lot
 
