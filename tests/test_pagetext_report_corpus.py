@@ -92,3 +92,18 @@ def test_look_alikes_are_stratified_and_dates_do_not_move():
     assert sum(t.firm_named_after_people for t in six) == 1
     assert not any(t.sender_street and t.sender_landline for t in six)
     assert TODAY.year == 2026  # a constant, never date.today()
+
+
+def test_the_command_line_survives_a_file_name_its_console_cannot_write(tmp_path, monkeypatch):
+    """On Windows, output that is piped is cp1252. A path outside it must not stop the run."""
+    import io
+    import sys
+
+    from usefulredact import cli
+
+    out = io.TextIOWrapper(io.BytesIO(), encoding="cp1252", errors="strict")
+    monkeypatch.setattr(sys, "stdout", out)
+    cli._never_fail_to_print()
+    print("checked \u6587\u66f8.pdf")  # a Japanese file name: not in cp1252
+    out.flush()
+    assert out.buffer.getvalue().startswith(b"checked ??.pdf")

@@ -77,6 +77,26 @@ jobs:
           if (-not $env:APP_VERSION -or $env:APP_VERSION -eq "main") { $env:APP_VERSION = "0.0.0" }
           & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" packaging\windows.iss
 
+      # UsefulText's packaging plan records a build that was green here and still did not
+      # work once installed on a real machine. So: install it as a person would, test the
+      # installed copy rather than the folder it was made from, and uninstall it.
+      - name: Install it, test the installed copy, uninstall
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $setup = Start-Process -FilePath .\UsefulRedact-windows-x64-setup.exe -ArgumentList "/VERYSILENT","/SUPPRESSMSGBOXES","/NORESTART","/CURRENTUSER" -Wait -PassThru
+          if ($setup.ExitCode -ne 0) { Write-Error "the installer exited with $($setup.ExitCode)"; exit 1 }
+          $app = Join-Path $env:LOCALAPPDATA "Programs\UsefulRedact"
+          foreach ($needed in "python\pythonw.exe", "python\python.exe", "icon.ico", "Lib\site-packages\app\static\index.html", "Lib\site-packages\models\PP-OCRv6_det_small.onnx") {
+            if (-not (Test-Path (Join-Path $app $needed))) { Write-Error "not installed: $needed"; exit 1 }
+          }
+          python scripts/smoke_bundle.py -- "$app\python\python.exe" -m app.launcher
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          $un = Start-Process -FilePath "$app\unins000.exe" -ArgumentList "/VERYSILENT","/SUPPRESSMSGBOXES","/NORESTART" -Wait -PassThru
+          Start-Sleep -Seconds 5
+          if (Test-Path "$app\python") { Write-Error "uninstalling left the app behind"; exit 1 }
+          Write-Output "installed, tested as installed, and uninstalled"
+
       - name: Bundle with PyInstaller
         if: runner.os != 'Windows'
         run: pyinstaller --noconfirm --clean --log-level WARN packaging/UsefulRedact.spec

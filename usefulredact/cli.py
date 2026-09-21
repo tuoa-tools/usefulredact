@@ -54,7 +54,17 @@ def cmd_check(args: argparse.Namespace) -> int:
     return 1 if flagged and args.strict else 0
 
 
+def _never_fail_to_print() -> None:
+    """A file can be named in any script, and a Windows console that is piped or redirected
+    writes cp1252: printing such a path would raise and stop the whole run. Better a
+    question mark in a file name than a batch of documents left unchecked."""
+    for stream in (sys.stdout, sys.stderr):
+        if stream is not None and hasattr(stream, "reconfigure"):
+            stream.reconfigure(errors="replace")
+
+
 def main(argv: list[str] | None = None) -> int:
+    _never_fail_to_print()
     parser = argparse.ArgumentParser(
         prog="usefulredact",
         description="Check whether the redaction in documents holds. Local only; files are "
