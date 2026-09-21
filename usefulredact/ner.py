@@ -21,6 +21,7 @@ from usefulredact.detectors import Match
 from usefulredact.models import CONTEXT, PI
 
 MODEL = "en_core_web_sm"
+_UNUSED_PIPES = ["tagger", "parser", "attribute_ruler", "lemmatizer"]  # only `ner` is used
 PLACE_FUZZY_MIN = 88.0  # how close to a known place name an OCR misreading may be
 PLACE_FUZZY_MIN_LEN = 6
 
@@ -40,9 +41,12 @@ def available() -> bool:
         if _nlp is not None:
             return True
         try:
-            import spacy
+            # Imported as a package rather than looked up by name: spacy.load(name) asks
+            # the installed-distribution metadata where the model is, and a frozen app
+            # (PyInstaller) has the package but not that metadata.
+            import en_core_web_sm
 
-            _nlp = spacy.load(MODEL, disable=["tagger", "parser", "attribute_ruler", "lemmatizer"])
+            _nlp = en_core_web_sm.load(disable=_UNUSED_PIPES)
             return True
         except Exception as exc:  # not installed, or the model did not load
             _load_error = repr(exc)

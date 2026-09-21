@@ -15,6 +15,7 @@ eval/results/
 
 # Build and tooling artefacts.
 app/static/
+packaging/models/
 dist/
 build/
 *.egg-info/

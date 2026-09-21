@@ -1,7 +1,7 @@
 name: Release
 
-# A tag like v0.1.0 builds the wheel and publishes it on the releases page. Running this by
-# hand ("Run workflow") builds and tests the wheel the same way and publishes nothing.
+# A tag like v0.1.2 builds everything below and publishes it on the releases page. Running
+# this by hand ("Run workflow") builds and tests it all the same way and publishes nothing.
 on:
   push:
     tags: ["v*"]
@@ -9,6 +9,102 @@ on:
 
 jobs:
   build:
+    name: build (${{ matrix.name }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            name: windows-x64
+          - os: ubuntu-22.04 # older glibc = runs on more distros
+            name: linux-x64
+          - os: macos-15-intel
+            name: macos-x64
+          - os: macos-latest # Apple Silicon
+            name: macos-arm64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+
+      - name: Build the UI
+        working-directory: frontend
+        run: npm ci && npm run build
+
+      - name: Install the app and the build tools
+        run: pip install -e ".[build]" -c constraints.txt
+
+      - name: Gather the models and check the UI
+        run: python scripts/prepare_bundle.py
+
+      # Windows: no PyInstaller - Defender quarantines its exes. Embeddable Python + Inno Setup.
+      - name: Assemble the Windows app folder
+        if: runner.os == 'Windows'
+        run: python scripts/build_windows.py
+
+      - name: Smoke-test the Windows layout
+        if: runner.os == 'Windows'
+        run: python scripts/smoke_bundle.py build/windows/python/python.exe -m app.launcher
+
+      - name: The windowed runtime starts too (what the shortcut runs; it has no console)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $env:USEFULREDACT_TOKEN = "windowed-smoke"
+          $app = Start-Process -FilePath build\windows\python\pythonw.exe -ArgumentList "-m","app.launcher","--no-browser","--port","8790" -PassThru
+          $ok = $false
+          foreach ($i in 1..120) {
+            Start-Sleep -Milliseconds 500
+            try { Invoke-RestMethod http://127.0.0.1:8790/api/health | Out-Null; $ok = $true; break } catch {}
+          }
+          if (-not $ok) { Write-Error "pythonw.exe did not serve"; exit 1 }
+          Invoke-RestMethod -Method Post -Headers @{ "x-usefulredact-token" = "windowed-smoke" } http://127.0.0.1:8790/api/quit | Out-Null
+          $app.WaitForExit(30000) | Out-Null
+          if (-not $app.HasExited) { Write-Error "pythonw.exe did not exit after Quit"; exit 1 }
+
+      - name: Build the Windows installer
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $env:APP_VERSION = "${{ github.ref_name }}".TrimStart("v")
+          if (-not $env:APP_VERSION -or $env:APP_VERSION -eq "main") { $env:APP_VERSION = "0.0.0" }
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" packaging\windows.iss
+
+      - name: Bundle with PyInstaller
+        if: runner.os != 'Windows'
+        run: pyinstaller --noconfirm --clean --log-level WARN packaging/UsefulRedact.spec
+
+      - name: Smoke-test the bundle (macOS)
+        if: runner.os == 'macOS'
+        run: python scripts/smoke_bundle.py dist/UsefulRedact.app/Contents/MacOS/UsefulRedact
+
+      - name: Smoke-test the bundle (Linux)
+        if: runner.os == 'Linux'
+        run: python scripts/smoke_bundle.py dist/UsefulRedact/UsefulRedact
+
+      - name: Package (macOS)
+        if: runner.os == 'macOS'
+        run: ditto -c -k --sequesterRsrc --keepParent dist/UsefulRedact.app UsefulRedact-${{ matrix.name }}.zip
+
+      - name: Package (Linux)
+        if: runner.os == 'Linux'
+        run: tar -C dist -czf UsefulRedact-${{ matrix.name }}.tar.gz UsefulRedact
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: UsefulRedact-${{ matrix.name }}
+          path: UsefulRedact-*.*
+          if-no-files-found: error
+
+  # For people who have Python: the app as a wheel, with the UI inside it.
+  wheel:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -28,12 +124,12 @@ jobs:
       - name: The wheel must carry the UI, and its version must be the tag's
         run: |
           python - <<'PY'
-          import glob, os, sys, zipfile
+          import glob, os, zipfile
           wheel = glob.glob("dist/*.whl")[0]
           names = zipfile.ZipFile(wheel).namelist()
           assert "app/static/index.html" in names, "the UI is not in the wheel"
           assert any(n.startswith("app/static/assets/") and n.endswith(".js") for n in names)
-          stray = [n for n in names if n.split("/")[0] in ("tests", "corpus", "frontend", "eval")]
+          stray = [n for n in names if n.split("/")[0] in ("tests", "corpus", "frontend", "eval", "scripts")]
           assert not stray, stray
           ref = os.environ.get("GITHUB_REF", "")
           if ref.startswith("refs/tags/v"):
@@ -45,16 +141,8 @@ jobs:
         run: |
           python -m venv /tmp/clean
           /tmp/clean/bin/pip install -q dist/*.whl -c constraints.txt
-          cd /tmp
-          /tmp/clean/bin/usefulredact --version
-          /tmp/clean/bin/usefulredact-app --no-browser --port 8765 > app.log 2>&1 &
-          for i in $(seq 1 120); do grep -q "Open:" app.log && break; sleep 0.5; done
-          url=$(grep -o "http://127.0.0.1:8765/launch?token=[^ ]*" app.log)
-          curl -s -o /dev/null -c jar "$url"
-          curl -s -b jar http://127.0.0.1:8765/ | grep -q "<title>UsefulRedact</title>"
-          test "$(curl -s -o /dev/null -w '%{http_code}' -b jar http://127.0.0.1:8765/api/session)" = 200
-          test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8765/api/session)" = 401
-          curl -s -b jar -X POST http://127.0.0.1:8765/api/quit
+          cp scripts/smoke_bundle.py /tmp/ && cd /tmp
+          /tmp/clean/bin/python smoke_bundle.py /tmp/clean/bin/usefulredact-app
       - uses: actions/upload-artifact@v7
         with:
           name: wheel
@@ -63,7 +151,7 @@ jobs:
 
   release:
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: build
+    needs: [build, wheel]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -76,6 +164,8 @@ jobs:
       - uses: softprops/action-gh-release@v3
         with:
           name: UsefulRedact ${{ github.ref_name }}
-          files: artifacts/usefulredact-*.whl
+          files: |
+            artifacts/UsefulRedact-*
+            artifacts/usefulredact-*.whl
           body_path: packaging/RELEASE_NOTES.md
           generate_release_notes: true

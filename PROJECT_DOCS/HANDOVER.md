@@ -1,6 +1,6 @@
 # UsefulRedact — Handover and Next Steps
 
-_Written 2026-09-22, now at version 0.1.1. Milestones 1 to 4 of `BRIEF.md` are
+_Written 2026-09-22, now at version 0.1.2. Milestones 1 to 4 of `BRIEF.md` are
 complete: the checker and its command line, the synthetic corpus, the
 evaluation, and the app. The code is on `main` at
 github.com/tuoa-tools/usefulredact, with CI green on Ubuntu, Windows and macOS
@@ -40,7 +40,10 @@ eval/                    eval_report.md and eval_chart.png (tracked); results/ i
 docs/screenshot.png      the README picture, taken from the running app
 PROJECT_DOCS/            BRIEF.md (specification), this file
 constraints.txt          the exact versions the tests and the evaluation ran with
-packaging/               RELEASE_NOTES.md, used by .github/workflows/release.yml
+packaging/               UsefulRedact.spec (PyInstaller: macOS, Linux), windows.iss (Inno
+                         Setup), the icons, RELEASE_NOTES.md; models/ is gathered, not kept
+scripts/                 prepare_bundle, build_windows, smoke_bundle (drives a built app
+                         end to end), make_icon
 ```
 
 Ignored and regenerated: `corpus/` (from its seed), `app/static/` (the built
@@ -209,6 +212,25 @@ page. Section 6B is about that.
   test of real time, and it eats the fake timestamps. Replace `module.time`.
 - **Chain a commit to its tests with `&&`.** A failing test went to UsefulText's
   public `main` because `pytest; git commit; git push` does not stop.
+- **Packaging.** The pipeline is UsefulText's, file for file, and so are its
+  reasons: on Windows no PyInstaller (Defender quarantines its exes) but
+  python.org's signed embeddable runtime plus Inno Setup; only the three OCR
+  models that are used, not the wheel's 260 MB. What this app added:
+  - *The name model.* `spacy.load("en_core_web_sm")` looks the model up in the
+    installed-distribution metadata, which a frozen app does not have; importing
+    the package and calling its `load()` works everywhere. spaCy also finds its
+    own components through entry points, so the spec copies the metadata of
+    spacy, thinc and their relatives into the bundle.
+  - *No console.* `pythonw.exe` and a windowed bundle have no `sys.stdout` at
+    all; the launcher's `print` of the launch address would have been the first
+    thing to crash. It now opens the null device in their place.
+  - *The smoke test cannot read the app's output* (there may be none) and the
+    app keeps no file it could read a port and secret from, so the test chooses
+    both and passes the secret in `USEFULREDACT_TOKEN`. It also points the app's
+    temp directory at a folder of its own, which is how it can assert that the
+    session folder exists while the app runs and is gone after Quit.
+  - An installer has an advantage the pip install lacks: the name model is inside
+    it, so the flaky GitHub download in §4A never happens on a user's machine.
 - **A clean-up cut short must still be sweepable.** A folder with no lock file
   used to fall back to a 24-hour age rule, so a partial delete that took the
   lock file and left a document would have sat for a day. Now `close()` keeps
@@ -307,9 +329,11 @@ disables Ctrl+C for that group, so a test of it proves nothing either way.
    turns every source line break into `<br>`; a README file is `markdown` mode.
 3. **Make the repository public.** The tags (`v0.1.0`, `v0.1.1`) and the topics
    are in place. Pushing a tag runs `.github/workflows/release.yml`, which
-   builds the wheel with the UI inside and publishes it on the releases page; a
-   new version means changing `__version__`, `frontend/package.json` and the
-   wheel address in the README, then tagging. The README's clone address and
+   builds the four downloads and the wheel, smoke-tests each, and publishes
+   them on the releases page; "Run workflow" does everything but publish, and
+   is worth doing before any tag. A new version means changing `__version__`,
+   `frontend/package.json` (and its lock) and the wheel address in the README,
+   then tagging once CI and a trial run of the release workflow are green. The README's clone address and
    its wheel address only work once the repository is public.
 4. ~~**In UsefulText**, reword where `ocr.py` came from.~~ Done, there and in its
    brief and handover.
@@ -361,11 +385,17 @@ disables Ctrl+C for that group, so a test of it proves nothing either way.
     session, and carry that into the export, which then becomes a review record.
 15. **Keys and zoom.** Next and previous finding from the keyboard; zoom on the
     page. Zoom was the first thing cut.
-16. **Installers.** The wheel half of this is done (item 20): a release carries a
-    wheel with `app/static` inside, so `pip install <wheel>` gives the app with
-    no Node. What is left is UsefulText's packaging pipeline for a macOS bundle
-    and a Windows installer (Milestone 5), for people without Python; the spaCy
-    model has to be bundled beside the three OCR models.
+16. ~~**Installers.**~~ Done in 0.1.2, the same way as UsefulText: a macOS app for
+    Apple Silicon and one for Intel, a Windows installer, a Linux tarball, and the
+    wheel, all built by `release.yml` and each started and driven end to end by
+    `scripts/smoke_bundle.py` on the system it is for before anything is
+    published. See "Packaging" in §4 for why each piece is the way it is. Left
+    rough: opening the app a second time starts a second, separate session in a
+    new tab rather than bringing back the first (UsefulText remembers a running
+    instance in its data folder; this app keeps no such folder, on purpose); and
+    on macOS, Quit from the Dock does nothing useful, because there is no window
+    and no Cocoa event loop to hear it, so the page's Quit button is the way out.
+    Neither loses anything: every road out still deletes the session.
 17. **An option to mask matched text in exports**, and DOCX input (Milestone 5).
 
 ### E. Found while testing on Windows (§4A)
@@ -408,6 +438,6 @@ disables Ctrl+C for that group, so a test of it proves nothing either way.
 Open it in `/Users/adam/data/Python stuff/usefulredact` and start with:
 
 > Read `PROJECT_DOCS/HANDOVER.md`, then `PROJECT_DOCS/BRIEF.md` and
-> `README.md`. We are at v0.1.1 with Milestones 1 to 4 done. Keep the rules in
+> `README.md`. We are at v0.1.2: Milestones 1 to 4, and the packaged releases of Milestone 5. Keep the rules in
 > section 5 of the handover. I want to work on section 6, starting with
 > item __. Before changing anything, run the tests and tell me they pass.

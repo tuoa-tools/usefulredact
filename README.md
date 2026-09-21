@@ -240,56 +240,43 @@ python -m usefulredact.evaluate
   (recoverable text under a box, versus PI nobody tried to hide), read a scan,
   or find a name.
 
-## Install and run
+## Install
 
-Python 3.13, on Windows, macOS or Linux. Everything installs with pip; there is
-nothing else to download (no Tesseract, no Node).
+Download from the [releases page](https://github.com/tuoa-tools/usefulredact/releases).
+Everything is inside (the OCR engine and its models, the name model, the UI), so
+nothing is downloaded when you install it or when you run it.
 
-**From a release.** The wheel on the
-[releases page](https://github.com/tuoa-tools/usefulredact/releases) has the
-app's UI inside it:
+- **macOS**: the zip for your Mac (`macos-arm64` for Apple Silicon, `macos-x64`
+  for Intel); unzip and drag UsefulRedact to Applications. The app is not signed
+  with an Apple developer certificate, so the first time macOS says it cannot be
+  opened: go to System Settings → Privacy & Security, find the message about
+  UsefulRedact and choose Open Anyway (on macOS 14 and earlier, right-click the
+  app and choose Open, then Open again). After that it opens normally.
+- **Windows**: `UsefulRedact-windows-x64-setup.exe`, a per-user install with no
+  administrator needed. SmartScreen may want "More info → Run anyway" once.
+- **Linux**: unpack the tarball and run `UsefulRedact/UsefulRedact`.
+
+It opens in your browser and has no window of its own. On macOS its Dock icon
+shows that it is running. To stop it, use **Quit** on the page, or just close
+the tab: it stops by itself two minutes later.
+
+**With Python 3.13 instead**, the wheel on the same page has the UI inside it:
 
 ```
 python3.13 -m venv .venv
-.venv/bin/pip install https://github.com/tuoa-tools/usefulredact/releases/download/v0.1.1/usefulredact-0.1.1-py3-none-any.whl
+.venv/bin/pip install https://github.com/tuoa-tools/usefulredact/releases/download/v0.1.2/usefulredact-0.1.2-py3-none-any.whl
 .venv/bin/usefulredact-app
 ```
 
 On Windows the commands are `.venv\Scripts\pip` and `.venv\Scripts\usefulredact-app`.
+This is also how to get the `usefulredact` command line.
 
-**From source**, to work on it or to reproduce the evaluation:
-
-```
-git clone https://github.com/tuoa-tools/usefulredact
-cd usefulredact
-python3.13 -m venv .venv
-.venv/bin/pip install -e . -c constraints.txt
-```
-
-`-c constraints.txt` installs the versions the tests and the evaluation were
-run with; leave it off to take the newest that `pyproject.toml` allows. The UI
-is built separately from source (see [The app](#the-app)).
-
-Either way, the name model is a wheel on the spaCy releases page rather than on
-PyPI, so that one download comes from GitHub. If it fails with a gateway error,
-GitHub is having a moment: run the same command again, or fetch the wheel
-yourself and install it from the file.
-
-### The command line
-
-```
-.venv/bin/usefulredact check letters/ scan.png --out report/
-.venv/bin/usefulredact check letters/ --watchlist names.txt --ignore ours.txt
-```
-
-Folders are walked for PDF, PNG and JPG files. It prints a verdict per file and
-writes `report.json`, `documents.csv` and `findings.csv`. `--strict` exits with
-status 1 when anything is flagged, for use in a script.
+## Using it
 
 ### The app
 
-Installed from a release, run `.venv/bin/usefulredact-app`. From source, build
-the UI once first, with Node 24:
+Installed from a download, open UsefulRedact. From the wheel, run
+`.venv/bin/usefulredact-app`. From source, build the UI once first, with Node 24:
 
 ```
 cd frontend && npm ci && npm run build && cd ..
@@ -311,6 +298,38 @@ it. Anything you do on the page starts the clock again, and it does not run
 while documents are still being checked. If the app stops for any other reason
 while the tab is open, the page says so, and what it was showing can no longer
 be read as current.
+
+### The command line
+
+```
+.venv/bin/usefulredact check letters/ scan.png --out report/
+.venv/bin/usefulredact check letters/ --watchlist names.txt --ignore ours.txt
+```
+
+Folders are walked for PDF, PNG and JPG files. It prints a verdict per file and
+writes `report.json`, `documents.csv` and `findings.csv`. `--strict` exits with
+status 1 when anything is flagged, for use in a script.
+
+## Run from source
+
+To work on it, or to reproduce the evaluation:
+
+```
+git clone https://github.com/tuoa-tools/usefulredact
+cd usefulredact
+python3.13 -m venv .venv
+.venv/bin/pip install -e . -c constraints.txt
+```
+
+`-c constraints.txt` installs the versions the tests and the evaluation were
+run with; leave it off to take the newest that `pyproject.toml` allows. The UI
+is built separately from source (see [The app](#the-app)).
+
+With pip, the name model is a wheel on the spaCy releases page rather than on
+PyPI, so that one download comes from GitHub. If it fails with a gateway error,
+GitHub is having a moment: run the same command again, or fetch the wheel
+yourself and install it from the file. The downloads above do not have this
+step; the model is already inside them.
 
 ## Privacy
 
@@ -379,6 +398,7 @@ and run offline. CI runs them on Ubuntu, Windows and macOS.
 | `usefulredact/ocr.py` | the RapidOCR wrapper, from UsefulText |
 | `usefulredact/corpus.py`, `evaluate.py` | the synthetic corpus and the evaluation |
 | `app/` | the local API, the session that keeps nothing, the launcher |
+| `packaging/`, `scripts/` | the app bundles and the Windows installer, and the smoke test each must pass |
 | `frontend/` | the React UI |
 | `PROJECT_DOCS/BRIEF.md` | the specification this was built to |
 

@@ -30,6 +30,7 @@ import sys
 import threading
 import time
 import webbrowser
+from pathlib import Path
 
 from app import console_win
 
@@ -44,6 +45,30 @@ def free_port() -> int:
 
 def launch_url(port: int, token: str) -> str:
     return f"http://127.0.0.1:{port}/launch?token={token}"
+
+
+def bundled_models_dir() -> Path | None:
+    """Where a packaged app keeps the OCR models: `models/` inside a PyInstaller bundle, or
+    beside the `app` package in the Windows layout (Lib/site-packages/models). None in a
+    development install, where the rapidocr wheel's own models are used."""
+    candidates = []
+    if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
+        candidates.append(Path(sys._MEIPASS) / "models")
+    candidates.append(Path(__file__).resolve().parents[1] / "models")
+    for folder in candidates:
+        if (folder / "PP-OCRv6_det_small.onnx").exists():
+            return folder
+    return None
+
+
+def point_at_bundled_models() -> None:
+    """Packaged builds ship three models (scripts/prepare_bundle.py) rather than the rapidocr
+    wheel's 260 MB; tell the engine where they are unless the person did."""
+    if os.environ.get("USEFULREDACT_MODEL_DIR"):
+        return
+    folder = bundled_models_dir()
+    if folder is not None:
+        os.environ["USEFULREDACT_MODEL_DIR"] = str(folder)
 
 
 def _clean_up(app) -> None:
@@ -77,10 +102,17 @@ def main(argv: list[str] | None = None) -> int:
         "--no-browser", action="store_true", help="only run the server; open nothing"
     )
     args = parser.parse_args(argv)
+    if sys.stdout is None or sys.stderr is None:  # pythonw.exe / a windowed app: no console
+        sys.stdout = sys.stdout or open(os.devnull, "w", encoding="utf-8")  # noqa: SIM115
+        sys.stderr = sys.stderr or open(os.devnull, "w", encoding="utf-8")  # noqa: SIM115
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+    point_at_bundled_models()
 
     port = args.port or free_port()
-    token = secrets.token_urlsafe(32)
+    # A fresh secret for every launch. The packaging smoke test sets its own so that it
+    # can talk to an app it cannot read the output of; whoever can set this process's
+    # environment could read its memory anyway.
+    token = os.environ.get("USEFULREDACT_TOKEN") or secrets.token_urlsafe(32)
     os.environ["USEFULREDACT_TOKEN"] = token
     os.environ["USEFULREDACT_DESKTOP"] = "1"
     os.environ["USEFULREDACT_CORS_ORIGINS"] = f"http://127.0.0.1:{port}"
