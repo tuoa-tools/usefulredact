@@ -229,6 +229,16 @@ page. Section 6B is about that.
     both and passes the secret in `USEFULREDACT_TOKEN`. It also points the app's
     temp directory at a folder of its own, which is how it can assert that the
     session folder exists while the app runs and is gone after Quit.
+  - *UsefulText's history was read for Windows lessons before tagging, and it had
+    three.* An arrow in a packaging script stopped its Windows build (the runner's
+    console is cp1252): nothing this project prints is outside ASCII, and the
+    command line now writes a question mark rather than raise on a file name its
+    console cannot write. Files read with the platform's default encoding failed
+    only on Windows: every read here names UTF-8. And a build that was green in
+    the workflow did not work once installed on a real machine. So the workflow
+    now runs the installer silently, checks what it put where, drives the
+    *installed* copy end to end and uninstalls it. That narrows the gap and does
+    not close it: see 6A.
   - An installer has an advantage the pip install lacks: the name model is inside
     it, so the flaky GitHub download in §4A never happens on a user's machine.
 - **A clean-up cut short must still be sweepable.** A folder with no lock file
@@ -327,7 +337,15 @@ disables Ctrl+C for that group, so a test of it proves nothing either way.
    ties the chart (documents handled correctly) to the tables (documents
    flagged). One trap: the API's `gfm` mode renders as a *comment* does and
    turns every source line break into `<br>`; a README file is `markdown` mode.
-3. **Make the repository public.** The tags (`v0.1.0`, `v0.1.1`) and the topics
+3. **Install the Windows download on a real Windows machine, and open a macOS one
+   from Finder.** The workflow installs, tests and uninstalls the Windows
+   installer, and the Intel macOS app was opened as an app on the development
+   machine; nobody has yet double-clicked the installer, met SmartScreen or
+   Gatekeeper, or used the Start-menu shortcut (which runs `pythonw.exe`, the
+   runtime with no console). UsefulText's first real install found a fault that
+   a green workflow had not. While the repository is private, fetch a download
+   with `gh release download v0.1.2 --repo tuoa-tools/usefulredact --pattern "*windows*"`.
+4. **Make the repository public.** The tags (`v0.1.0` to `v0.1.2`) and the topics
    are in place. Pushing a tag runs `.github/workflows/release.yml`, which
    builds the four downloads and the wheel, smoke-tests each, and publishes
    them on the releases page; "Run workflow" does everything but publish, and
@@ -335,7 +353,7 @@ disables Ctrl+C for that group, so a test of it proves nothing either way.
    `frontend/package.json` (and its lock) and the wheel address in the README,
    then tagging once CI and a trial run of the release workflow are green. The README's clone address and
    its wheel address only work once the repository is public.
-4. ~~**In UsefulText**, reword where `ocr.py` came from.~~ Done, there and in its
+5. ~~**In UsefulText**, reword where `ocr.py` came from.~~ Done, there and in its
    brief and handover.
 
 ### B. Make the evaluation harder to argue with (the most valuable work)
