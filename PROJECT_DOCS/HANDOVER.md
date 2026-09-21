@@ -2,9 +2,9 @@
 
 _Written 2026-09-22, at version 0.1.0. Milestones 1 to 4 of `BRIEF.md` are
 complete: the checker and its command line, the synthetic corpus, the
-evaluation, and the app. Four commits on `main` at
-github.com/tuoa-tools/usefulredact, CI green on Ubuntu, Windows and macOS plus
-the frontend job. The repository was created private; its owner makes it
+evaluation, and the app. The code is on `main` at
+github.com/tuoa-tools/usefulredact, with CI green on Ubuntu, Windows and macOS
+plus the frontend job. The repository was created private; its owner makes it
 public. `BRIEF.md` is the specification (its last section, "As built", lists
 what differs from the plan) and `README.md` is the public account, including
 the evaluation. Read both before this file. Section 6 is what to do next._
