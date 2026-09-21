@@ -7,10 +7,13 @@ SameSite=Strict cookie. Other websites can't send that cookie, and CORS blocks t
 reading anything anyway. The server binds to 127.0.0.1, so nothing off this machine can
 reach it at all.
 
-Shutdown: there is no window to close, so the server exits by itself once the page has
-stopped pinging /api/health for two minutes and nothing is being checked. Ctrl+C, a
-termination signal and /api/quit do the same. Either way the session's temporary folder
-is deleted; a process killed outright leaves it for the next start to sweep.
+Shutdown: there is no window of its own to close, so the server exits by itself once the
+page has stopped pinging /api/health for two minutes and nothing is being checked. Ctrl+C,
+a termination signal and /api/quit do the same. Closing the console the app was started
+from, logging off and shutting down take a separate road (console_win.py), because Windows
+sends console control events rather than signals and then ends the process within seconds.
+Either way the session's temporary folder is deleted; a process killed outright leaves it
+for the next start to sweep.
 
 Nothing is logged to a file: a log that named documents would outlive the session.
 """
@@ -28,6 +31,8 @@ import threading
 import time
 import webbrowser
 
+from app import console_win
+
 log = logging.getLogger(__name__)
 
 
@@ -39,6 +44,15 @@ def free_port() -> int:
 
 def launch_url(port: int, token: str) -> str:
     return f"http://127.0.0.1:{port}/launch?token={token}"
+
+
+def _clean_up(app) -> None:
+    """Delete this session's copies of the documents, with only seconds to do it in."""
+    from app.session import CONSOLE_CLOSE_WAIT_SECONDS  # imported late: --help stays quick
+
+    session = getattr(app.state, "session", None)
+    if session is not None:
+        session.close(wait=CONSOLE_CLOSE_WAIT_SECONDS)
 
 
 def wait_until_started(server, thread: threading.Thread, timeout: float = 30.0) -> bool:
@@ -86,7 +100,7 @@ def main(argv: list[str] | None = None) -> int:
     # does not: without this, `kill` would end the process with the session folder
     # (the copies of the documents) still on disk.
     signal.signal(signal.SIGTERM, lambda *_: quit_all())
-    if hasattr(signal, "SIGBREAK"):  # Ctrl+Break, and what Windows sends on console close
+    if hasattr(signal, "SIGBREAK"):  # Ctrl+Break on Windows
         signal.signal(signal.SIGBREAK, lambda *_: quit_all())
     app.state.idle_shutdown = not args.no_browser  # a tab can be closed without telling us
     url = launch_url(port, token)
@@ -97,6 +111,11 @@ def main(argv: list[str] | None = None) -> int:
         if not wait_until_started(server, thread):
             log.error("the server did not start")
             return 1
+        # Closing the console window, logging off and shutting down never reach the
+        # handlers above: Windows sends console control events, which the signal module
+        # does not carry. Asking uvicorn to stop would be no use either, as the process
+        # is ended a few seconds later, so the session is closed here and now.
+        console_win.install(lambda: _clean_up(app))
         # flush: with the output piped or redirected, a buffered line would never show
         print(
             f"UsefulRedact {app.version} is running on this machine only.\nOpen: {url}",
