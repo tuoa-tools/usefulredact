@@ -18,7 +18,8 @@ checked without credentials and works. Known faults that are written
 down and not yet fixed, in the order they matter: the Windows uninstaller does
 not stop a running app and can strand document copies (§6E item 24); a
 windowless app cannot be found again if its tab is lost (item 22); the
-downloads are unsigned (item 23). The most valuable work after those is making
+downloads are unsigned (item 23); an ignore-list entry also silences shorter
+findings inside it (item 25). The most valuable work after those is making
 the evaluation harder to argue with (§6B).
 
 ## 1. State of the repository
@@ -253,6 +254,18 @@ page. Section 6B is about that.
     not close it: see 6A.
   - An installer has an advantage the pip install lacks: the name model is inside
     it, so the flaky GitHub download in §4A never happens on a user's machine.
+- **macOS: tell people to clear the quarantine flag, not to use Open Anyway.**
+  The README first sent people to System Settings → Open Anyway. UsefulMedia's
+  README already recorded that route as unreliable on Sequoia, and UsefulText's
+  release notes already gave the command that works
+  (`xattr -d com.apple.quarantine /Applications/<App>.app`). Read the other
+  tools' install notes before writing new ones: they are the record of what
+  real machines did.
+- **Say what a number rests on.** "0 of 18 with the ignore list" was true and
+  under-explained: the tenth false positive was a firm's name, and it only goes
+  away because the sender's *name* is on the list, not just its address and
+  phone. A reviewer asked, the counterfactual was run (address and phone alone
+  leave it flagged), and the README now says so.
 - **A clean-up cut short must still be sweepable.** A folder with no lock file
   used to fall back to a 24-hour age rule, so a partial delete that took the
   lock file and left a document would have sat for a day. Now `close()` keeps
@@ -556,6 +569,18 @@ when it fails. See §6E item 22.
     - the app deletes its own folder when stopped, even after being uninstalled -
     so this is about the person who reboots instead, or force-quits, and whose
     document copies would then outlive the program that made them.
+25. **The ignore list swallows fragments.** `_ignored` in `pipeline.py` drops a
+    finding when it matches an entry, when the entry is inside it, *or when it is
+    inside the entry*. The last was added so that an OCR-clipped piece of an
+    ignored address is ignored too, but it also means that with "Johnson
+    Plumbing" on the list a bare "Johnson" anywhere in the document is silenced
+    (a full name such as "Anna Johnson" is not). The README's Limitations says
+    so. Tightening it, say by requiring the fragment to be most of the entry, or
+    by not applying that direction to name findings, is a recall improvement
+    that changes a reported number: the evaluation's "0 of 18 with the ignore
+    list" rests on the sender's *name* being listed, and on the bare "Johnson"
+    from that letterhead being swallowed with it. Re-run the evaluation and
+    report whatever it then says.
 
 ## 7. Parking lot
 

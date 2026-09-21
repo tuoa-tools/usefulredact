@@ -27,6 +27,45 @@ hold. One of the "Useful" family of tools from
 [UsefulText](https://github.com/tuoa-tools/usefultext)'s OCR engine and app
 pattern.
 
+## Install
+
+Download from the [releases page](https://github.com/tuoa-tools/usefulredact/releases).
+Everything is inside (the OCR engine and its models, the name model, the UI), so
+nothing is downloaded when you install it or when you run it.
+
+- **macOS**: the zip for your Mac (`macos-arm64` for Apple Silicon, `macos-x64`
+  for Intel); unzip and drag UsefulRedact to Applications. The app is not
+  notarised by Apple, so macOS refuses to open it until the quarantine flag it
+  put on the download is cleared. Once, in Terminal:
+
+  ```
+  xattr -d com.apple.quarantine /Applications/UsefulRedact.app
+  ```
+
+  Then open it as usual. ("No such xattr" means the flag is already gone.)
+  Apple's own route, System Settings → Privacy & Security → Open Anyway, has
+  proved unreliable on recent macOS for the other tools in this family, which
+  is why the command comes first. The first launch can be slow while macOS
+  checks the new files.
+- **Windows**: `UsefulRedact-windows-x64-setup.exe`, a per-user install with no
+  administrator needed. SmartScreen may want "More info → Run anyway" once.
+- **Linux**: unpack the tarball and run `UsefulRedact/UsefulRedact`.
+
+It opens in your browser and has no window of its own. On macOS its Dock icon
+shows that it is running. To stop it, use **Quit** on the page, or just close
+the tab: it stops by itself two minutes later.
+
+**With Python 3.13 instead**, the wheel on the same page has the UI inside it:
+
+```
+python3.13 -m venv .venv
+.venv/bin/pip install https://github.com/tuoa-tools/usefulredact/releases/download/v0.1.2/usefulredact-0.1.2-py3-none-any.whl
+.venv/bin/usefulredact-app
+```
+
+On Windows the commands are `.venv\Scripts\pip` and `.venv\Scripts\usefulredact-app`.
+This is also how to get the `usefulredact` command line.
+
 ## Results at a glance
 
 Measured on a **synthetic** corpus of 60 invented documents, never on real ones
@@ -48,7 +87,47 @@ These count documents, not every piece of personal information in them. Of the
 were flagged: nine for the sending
 organisation's own street address or landline, which the checker cannot tell
 from a person's, and one where the name model took a firm's name for a
-person's. With each sender's own details on an ignore list, none were flagged.
+person's. That firm is the sender of its letter. With each sender's own name,
+address and phone number on an ignore list, none were flagged.
+
+## Using it
+
+### The app
+
+Installed from a download, open UsefulRedact. From the wheel, run
+`.venv/bin/usefulredact-app`. From source, build the UI once first, with Node 24:
+
+```
+cd frontend && npm ci && npm run build && cd ..
+.venv/bin/usefulredact-app
+```
+
+It opens in a browser tab. Drop in files or a folder; each gets a verdict badge;
+open one to see every finding boxed on the page, with the text that was
+recovered beside it. Click a box or a row to find the other. For a PDF, "draw
+the page without its annotations" shows what an annotation was covering.
+Closing the tab stops the app after two minutes, once nothing is being checked;
+having another tab in front, or closing the laptop lid for a moment, does not.
+
+**It does not wait for you indefinitely.** Left untouched for 30 minutes with
+documents loaded, it asks whether you are still there, and two minutes later
+takes what it found off the page, deletes its copies and stops. What it shows is
+personal information, and a screen nobody is watching is the wrong place for
+it. Anything you do on the page starts the clock again, and it does not run
+while documents are still being checked. If the app stops for any other reason
+while the tab is open, the page says so, and what it was showing can no longer
+be read as current.
+
+### The command line
+
+```
+.venv/bin/usefulredact check letters/ scan.png --out report/
+.venv/bin/usefulredact check letters/ --watchlist names.txt --ignore ours.txt
+```
+
+Folders are walked for PDF, PNG and JPG files. It prints a verdict per file and
+writes `report.json`, `documents.csv` and `findings.csv`. `--strict` exits with
+status 1 when anything is flagged, for use in a script.
 
 ## Verdicts
 
@@ -128,7 +207,7 @@ documents.
 60 documents, six for each of ten methods, generated with `--seed 42`. An
 *issue* is any verdict other than `NO_ISSUES_FOUND`.
 
-| | Full pipeline | Full pipeline, with the sender's own details on the ignore list | Baseline: text layer + regex |
+| | Full pipeline | Full pipeline, with the sender's own name, address and phone on the ignore list | Baseline: text layer + regex |
 |---|---|---|---|
 | Documents with an issue that were flagged (recall) | **42 of 42** | 42 of 42 | 30 of 42 (71%) |
 | Documents with no issue that were flagged (false positives) | 10 of 18 | **0 of 18** | 6 of 18 |
@@ -146,8 +225,11 @@ sitting in the text layer, and none of the scans.
 carry, by construction, something of the *sender's* that looks like PI: its
 street address, or a landline. The checker cannot tell whose address it is, so
 it flags them: that accounts for 9 of the 10. The tenth is the name model
-reading the firm "Johnson Plumbing" as a person. With each sender's own details
-on the ignore list, which is how the tool is meant to be used, none remain.
+reading the firm "Johnson Plumbing" as a person. That firm is the sender of the
+letter, so its name goes on the ignore list along with its address and phone
+number; with all three in place, which is how the tool is meant to be used,
+none remain. The name is doing the work there: with only the address and phone
+listed, that document is still flagged.
 
 ![Documents handled correctly, by redaction method: full pipeline, full pipeline with an ignore list, and the baseline](eval/eval_chart.png)
 
@@ -240,76 +322,6 @@ python -m usefulredact.evaluate
   (recoverable text under a box, versus PI nobody tried to hide), read a scan,
   or find a name.
 
-## Install
-
-Download from the [releases page](https://github.com/tuoa-tools/usefulredact/releases).
-Everything is inside (the OCR engine and its models, the name model, the UI), so
-nothing is downloaded when you install it or when you run it.
-
-- **macOS**: the zip for your Mac (`macos-arm64` for Apple Silicon, `macos-x64`
-  for Intel); unzip and drag UsefulRedact to Applications. The app is not signed
-  with an Apple developer certificate, so the first time macOS says it cannot be
-  opened: go to System Settings → Privacy & Security, find the message about
-  UsefulRedact and choose Open Anyway (on macOS 14 and earlier, right-click the
-  app and choose Open, then Open again). After that it opens normally.
-- **Windows**: `UsefulRedact-windows-x64-setup.exe`, a per-user install with no
-  administrator needed. SmartScreen may want "More info → Run anyway" once.
-- **Linux**: unpack the tarball and run `UsefulRedact/UsefulRedact`.
-
-It opens in your browser and has no window of its own. On macOS its Dock icon
-shows that it is running. To stop it, use **Quit** on the page, or just close
-the tab: it stops by itself two minutes later.
-
-**With Python 3.13 instead**, the wheel on the same page has the UI inside it:
-
-```
-python3.13 -m venv .venv
-.venv/bin/pip install https://github.com/tuoa-tools/usefulredact/releases/download/v0.1.2/usefulredact-0.1.2-py3-none-any.whl
-.venv/bin/usefulredact-app
-```
-
-On Windows the commands are `.venv\Scripts\pip` and `.venv\Scripts\usefulredact-app`.
-This is also how to get the `usefulredact` command line.
-
-## Using it
-
-### The app
-
-Installed from a download, open UsefulRedact. From the wheel, run
-`.venv/bin/usefulredact-app`. From source, build the UI once first, with Node 24:
-
-```
-cd frontend && npm ci && npm run build && cd ..
-.venv/bin/usefulredact-app
-```
-
-It opens in a browser tab. Drop in files or a folder; each gets a verdict badge;
-open one to see every finding boxed on the page, with the text that was
-recovered beside it. Click a box or a row to find the other. For a PDF, "draw
-the page without its annotations" shows what an annotation was covering.
-Closing the tab stops the app after two minutes, once nothing is being checked;
-having another tab in front, or closing the laptop lid for a moment, does not.
-
-**It does not wait for you indefinitely.** Left untouched for 30 minutes with
-documents loaded, it asks whether you are still there, and two minutes later
-takes what it found off the page, deletes its copies and stops. What it shows is
-personal information, and a screen nobody is watching is the wrong place for
-it. Anything you do on the page starts the clock again, and it does not run
-while documents are still being checked. If the app stops for any other reason
-while the tab is open, the page says so, and what it was showing can no longer
-be read as current.
-
-### The command line
-
-```
-.venv/bin/usefulredact check letters/ scan.png --out report/
-.venv/bin/usefulredact check letters/ --watchlist names.txt --ignore ours.txt
-```
-
-Folders are walked for PDF, PNG and JPG files. It prints a verdict per file and
-writes `report.json`, `documents.csv` and `findings.csv`. `--strict` exits with
-status 1 when anything is flagged, for use in a script.
-
 ## Run from source
 
 To work on it, or to reproduce the evaluation:
@@ -366,6 +378,10 @@ step; the model is already inside them.
 - **Whose address is it?** It cannot tell an organisation's street address or
   landline from a person's, so it flags both. That is what the ignore list is
   for.
+- **The ignore list is blunt.** An entry silences a finding that matches it and
+  also any shorter finding contained in it: with "Johnson Plumbing" listed, a
+  bare "Johnson" elsewhere in the document is ignored too (a full name such as
+  "Anna Johnson" is not). List only what you are sure of.
 - **OCR errors.** A misread digit breaks a checksum; a misread letter hides a
   name from an exact match. The fuzzy watchlist helps with names only.
 - **Marker on a scan.** It reads what the engine can read through a stroke,
