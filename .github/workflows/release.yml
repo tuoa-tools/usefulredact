@@ -51,7 +51,7 @@ jobs:
 
       - name: Smoke-test the Windows layout
         if: runner.os == 'Windows'
-        run: python scripts/smoke_bundle.py build/windows/python/python.exe -m app.launcher
+        run: python scripts/smoke_bundle.py -- build/windows/python/python.exe -m app.launcher
 
       - name: The windowed runtime starts too (what the shortcut runs; it has no console)
         if: runner.os == 'Windows'

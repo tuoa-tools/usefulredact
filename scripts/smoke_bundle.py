@@ -3,7 +3,7 @@
 
     python scripts/smoke_bundle.py dist/UsefulRedact.app/Contents/MacOS/UsefulRedact
     python scripts/smoke_bundle.py dist/UsefulRedact/UsefulRedact
-    python scripts/smoke_bundle.py build/windows/python/python.exe -m app.launcher
+    python scripts/smoke_bundle.py -- build/windows/python/python.exe -m app.launcher
     python scripts/smoke_bundle.py .venv/bin/usefulredact-app
 
 It makes two documents of its own (nothing real is involved): a PDF with a black box drawn
@@ -102,7 +102,11 @@ def write_documents(folder: Path) -> tuple[Path, Path]:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("command", nargs="+", help="the app's executable (and arguments)")
+    ap.add_argument(
+        "command",
+        nargs="+",
+        help="the app's executable and its arguments; put -- first if they start with a dash",
+    )
     ap.add_argument("--timeout", type=float, default=300.0, help="seconds to wait for the checks")
     args = ap.parse_args()
 
