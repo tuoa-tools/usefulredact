@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Download, Lock, Power, Trash2 } from 'lucide-react';
 import { api, exportUrl, type Session } from './api';
@@ -6,10 +6,12 @@ import { DocumentList } from './components/DocumentList';
 import { DocumentView } from './components/DocumentView';
 import { DropZone } from './components/DropZone';
 import { ListsPanel } from './components/ListsPanel';
+import { ClosedUnattended, StillThere, type ClosedOutcome } from './components/Unattended';
 import { VerdictBadge } from './components/VerdictBadge';
 import type { Dropped } from './lib/files';
 import { healthQueryOptions } from './lib/keepAlive';
 import { parseRoute, writeRoute } from './lib/route';
+import { useUnattended } from './lib/unattended';
 import { VERDICTS } from './lib/verdicts';
 
 const POLL_MS = 700;
@@ -139,6 +141,31 @@ export default function App() {
   const current = documents.find((d) => d.id === selected) ?? null;
   const checked = documents.filter((d) => d.status === 'done').length;
 
+  // Left alone with documents loaded, the session closes itself: see lib/unattended.ts.
+  // What was found comes off the page first, and only then is the app asked to stop, so a
+  // slow answer never leaves it showing.
+  const [leftAlone, setLeftAlone] = useState<'closing' | ClosedOutcome | null>(null);
+  const desktop = health.data?.desktop ?? false;
+  const closeUnattended = useCallback(() => {
+    setLeftAlone('closing');
+    (desktop ? api.quit() : api.clear()).then(
+      () => setLeftAlone(desktop ? 'stopped' : 'cleared'),
+      () => setLeftAlone('unreachable')
+    );
+  }, [desktop]);
+  const holding =
+    documents.length > 0 && !session.data?.checking && !health.isError && leftAlone === null;
+  const unattended = useUnattended(holding, closeUnattended);
+
+  if (leftAlone === 'closing') {
+    return (
+      <div className="flex h-screen items-center justify-center p-8 text-slate-700">
+        Closing this session…
+      </div>
+    );
+  }
+  if (leftAlone !== null) return <ClosedUnattended outcome={leftAlone} />;
+
   if (health.data?.quit_requested || quit.isSuccess) {
     return (
       <div className="flex h-screen items-center justify-center p-8 text-center">
@@ -256,6 +283,9 @@ export default function App() {
           </main>
         </div>
       </div>
+      {unattended.warning && !stopped && (
+        <StillThere secondsLeft={unattended.secondsLeft} onStay={unattended.stay} />
+      )}
       {stopped && <ServerStopped />}
     </>
   );

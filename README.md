@@ -251,7 +251,7 @@ app's UI inside it:
 
 ```
 python3.13 -m venv .venv
-.venv/bin/pip install https://github.com/tuoa-tools/usefulredact/releases/download/v0.1.0/usefulredact-0.1.0-py3-none-any.whl
+.venv/bin/pip install https://github.com/tuoa-tools/usefulredact/releases/download/v0.1.1/usefulredact-0.1.1-py3-none-any.whl
 .venv/bin/usefulredact-app
 ```
 
@@ -301,8 +301,16 @@ open one to see every finding boxed on the page, with the text that was
 recovered beside it. Click a box or a row to find the other. For a PDF, "draw
 the page without its annotations" shows what an annotation was covering.
 Closing the tab stops the app after two minutes, once nothing is being checked;
-having another tab in front does not. If the app stops while the tab is still
-open, the page says so and what it was showing can no longer be read as current.
+having another tab in front, or closing the laptop lid for a moment, does not.
+
+**It does not wait for you indefinitely.** Left untouched for 30 minutes with
+documents loaded, it asks whether you are still there, and two minutes later
+takes what it found off the page, deletes its copies and stops. What it shows is
+personal information, and a screen nobody is watching is the wrong place for
+it. Anything you do on the page starts the clock again, and it does not run
+while documents are still being checked. If the app stops for any other reason
+while the tab is open, the page says so, and what it was showing can no longer
+be read as current.
 
 ## Privacy
 
@@ -313,7 +321,7 @@ open, the page says so and what it was showing can no longer be read as current.
 - **No telemetry**, of any kind.
 - **Nothing is kept.** The app copies dropped files into a private temporary
   folder to read them, and deletes it when it stops: on Quit, when the tab has
-  been closed for two minutes, on Ctrl+C, on a termination signal, and on
+  been closed for two minutes, when the session has been left untouched for 30, on Ctrl+C, on a termination signal, and on
   Windows when the console window is closed, at log off and at shut down. A
   process that is killed outright (`kill -9`, a power cut) cannot clean up after
   itself; the next start finds that folder and deletes it. The watchlist and

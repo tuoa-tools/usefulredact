@@ -250,3 +250,43 @@ def test_idle_shutdown_waits_for_work(monkeypatch):
     assert main.idle_expired(State, 1000.0)
     State.idle_shutdown = False
     assert not main.idle_expired(State, 1000.0)
+
+
+def test_waking_from_sleep_is_not_silence_from_the_tab(monkeypatch):
+    """On Windows the clock counts through sleep, so the first check after the lid is
+    opened would see an hour without a ping. The watch gives the page its two minutes
+    again; whether the session was left too long is then the page's call."""
+    import asyncio
+    from types import SimpleNamespace
+
+    assert main.woke_from_sleep(main.IDLE_CHECK_SECONDS + 0.5) is False
+    assert main.woke_from_sleep(3600.0) is True
+
+    quits = []
+    state = SimpleNamespace(
+        desktop=True,
+        idle_shutdown=True,
+        last_ping=0.0,
+        session=SimpleNamespace(busy=0),
+        quit_requested=False,
+        on_quit=lambda: quits.append(True),
+    )
+    clock = iter([0.0, 3600.0, 3615.0])  # start; the check after an hour asleep; the next
+
+    async def no_wait(_seconds):
+        return None
+
+    def monotonic():
+        try:
+            return next(clock)
+        except StopIteration:
+            raise asyncio.CancelledError from None
+
+    # Only as the watch sees them: the event loop running this test reads the real clock.
+    monkeypatch.setattr(main, "asyncio", SimpleNamespace(sleep=no_wait))
+    monkeypatch.setattr(main, "time", SimpleNamespace(monotonic=monotonic))
+    try:
+        asyncio.run(main._idle_watch(SimpleNamespace(state=state)))
+    except asyncio.CancelledError:
+        pass
+    assert quits == [] and state.last_ping == 3600.0

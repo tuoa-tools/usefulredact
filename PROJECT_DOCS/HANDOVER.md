@@ -1,6 +1,6 @@
 # UsefulRedact — Handover and Next Steps
 
-_Written 2026-09-22, at version 0.1.0. Milestones 1 to 4 of `BRIEF.md` are
+_Written 2026-09-22, now at version 0.1.1. Milestones 1 to 4 of `BRIEF.md` are
 complete: the checker and its command line, the synthetic corpus, the
 evaluation, and the app. The code is on `main` at
 github.com/tuoa-tools/usefulredact, with CI green on Ubuntu, Windows and macOS
@@ -33,7 +33,8 @@ app/
 frontend/                React 19 + Vite + TypeScript + Tailwind 4 + TanStack Query
   src/App.tsx            header, drop zone, lists, document list, export
   src/components/        DocumentView (page + boxes + findings), DropZone, ListsPanel, ...
-  src/lib/               verdicts (all wording), boxes, files, route, keepAlive (the ping)
+  src/lib/               verdicts (all wording), boxes, files, route, keepAlive (the
+                         ping), unattended (closing a session that has been left alone)
 tests/                   pytest; fixtures are generated, nothing is downloaded
 eval/                    eval_report.md and eval_chart.png (tracked); results/ is ignored
 docs/screenshot.png      the README picture, taken from the running app
@@ -186,6 +187,28 @@ page. Section 6B is about that.
   minute, so the ping is every 30 s, not 60, to stay inside the server's 120 s.
   The settings and their reasons are in `frontend/src/lib/keepAlive.ts`, with a
   test, and a Python test holds the page's copy of the limit to the server's.
+- **Left alone, this app closes the session; UsefulText, with the same machinery,
+  waits.** The two want opposite things. Someone who leaves UsefulText and comes
+  back wants to carry on. Someone who leaves this one has left personal
+  information on a screen and copies on a disk. So once the ping was fixed and an
+  open tab could keep the app alive for ever, a second clock was needed: 30
+  minutes untouched with documents loaded, a two-minute warning, then what was
+  found comes off the page *first* and the app is asked to stop. It is the wall
+  clock, so a lid closed for an hour counts as an hour; it does not run with
+  nothing loaded or while documents are being checked. `UNATTENDED_MS` in
+  `frontend/src/lib/unattended.ts` is the one number; a setting for it would be
+  the next step if thirty minutes is wrong for someone. Checked in a real
+  browser by fast-forwarding headless Chrome (`--virtual-time-budget`).
+- **On Windows the monotonic clock counts through sleep.** Open the lid after an
+  hour and the idle watch's first check saw an hour without a ping and quit
+  before the page could answer. A check that arrives far later than it was due
+  now means the machine slept, and the page gets its two minutes afresh
+  (`woke_from_sleep` in `app/main.py`; the same fix went into UsefulText).
+- **Patch a clock only where the code under test reads it.** Replacing
+  `time.monotonic` for the whole process starves the event loop running the
+  test of real time, and it eats the fake timestamps. Replace `module.time`.
+- **Chain a commit to its tests with `&&`.** A failing test went to UsefulText's
+  public `main` because `pytest; git commit; git push` does not stop.
 - **A clean-up cut short must still be sweepable.** A folder with no lock file
   used to fall back to a 24-hour age rule, so a partial delete that took the
   lock file and left a document would have sat for a day. Now `close()` keeps
@@ -282,13 +305,14 @@ disables Ctrl+C for that group, so a test of it proves nothing either way.
    ties the chart (documents handled correctly) to the tables (documents
    flagged). One trap: the API's `gfm` mode renders as a *comment* does and
    turns every source line break into `<br>`; a README file is `markdown` mode.
-3. **Tag `v0.1.0`** and make the repository public, and add topics (redaction,
-   privacy, pdf, ocr). Pushing the tag runs `.github/workflows/release.yml`,
-   which builds the wheel with the UI inside and publishes it on the releases
-   page. The README's clone address and its wheel address both only work once
-   the repository is public and the tag exists.
-4. **In UsefulText**, reword the first line of `usefultext/ocr.py`'s docstring,
-   which still describes where that file came from before UsefulText.
+3. **Make the repository public.** The tags (`v0.1.0`, `v0.1.1`) and the topics
+   are in place. Pushing a tag runs `.github/workflows/release.yml`, which
+   builds the wheel with the UI inside and publishes it on the releases page; a
+   new version means changing `__version__`, `frontend/package.json` and the
+   wheel address in the README, then tagging. The README's clone address and
+   its wheel address only work once the repository is public.
+4. ~~**In UsefulText**, reword where `ocr.py` came from.~~ Done, there and in its
+   brief and handover.
 
 ### B. Make the evaluation harder to argue with (the most valuable work)
 
@@ -366,9 +390,8 @@ disables Ctrl+C for that group, so a test of it proves nothing either way.
     160 KB wheel, installed into an empty venv in another folder, serves the UI
     and catches a failed redaction. It does not end the name-model download,
     which still comes from GitHub at install time (§4A).
-21. **`.gitattributes`.** The repository has none, so line endings depend on
-    each machine's `core.autocrlf`. It has not bitten yet, and a cross-platform
-    project with a frontend in it will eventually make it bite.
+21. ~~**`.gitattributes`.**~~ Done. Text is stored with LF on every machine. No
+    file in the repository had CRLF when it went in, so nothing else changed.
 
 ## 7. Parking lot
 
@@ -385,6 +408,6 @@ disables Ctrl+C for that group, so a test of it proves nothing either way.
 Open it in `/Users/adam/data/Python stuff/usefulredact` and start with:
 
 > Read `PROJECT_DOCS/HANDOVER.md`, then `PROJECT_DOCS/BRIEF.md` and
-> `README.md`. We are at v0.1.0 with Milestones 1 to 4 done. Keep the rules in
+> `README.md`. We are at v0.1.1 with Milestones 1 to 4 done. Keep the rules in
 > section 5 of the handover. I want to work on section 6, starting with
 > item __. Before changing anything, run the tests and tell me they pass.
