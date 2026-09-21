@@ -12,8 +12,9 @@ account, including the evaluation. Read both before this file._
 
 **Where things stand, in four lines.** It works, it is measured, and it has been
 run by hand on macOS and on a Windows 11 machine, from source and from the
-installer. The repository is still private: making it public is its owner's
-step, and nothing else stands in the way (§6A). Known faults that are written
+installer. The repository went public on 2026-09-22, and every address in the
+README (the clone, the wheel, the four downloads, both pictures) was then
+checked without credentials and works. Known faults that are written
 down and not yet fixed, in the order they matter: the Windows uninstaller does
 not stop a running app and can strand document copies (§6E item 24); a
 windowless app cannot be found again if its tab is lost (item 22); the
@@ -391,7 +392,7 @@ when it fails. See §6E item 22.
 
 ## 6. Next steps, in order
 
-### A. Before the repository goes public (an hour or two)
+### A. Before the repository goes public (done, bar one check)
 
 1. ~~**Run it on a real Windows machine.**~~ Done 2026-09-22, see §4A. The tab,
    the folder picker, Quit and every other road out were checked by hand;
@@ -422,7 +423,7 @@ when it fails. See §6E item 22.
    the Intel app was opened on the development machine; nobody has met
    Gatekeeper. UsefulText's first real install found a fault that a green
    workflow had not.
-4. **Make the repository public.** The tags (`v0.1.0` to `v0.1.2`) and the topics
+4. ~~**Make the repository public.**~~ Done 2026-09-22. The tags (`v0.1.0` to `v0.1.2`) and the topics
    are in place. Pushing a tag runs `.github/workflows/release.yml`, which
    builds the four downloads and the wheel, smoke-tests each, and publishes
    them on the releases page; "Run workflow" does everything but publish, and
